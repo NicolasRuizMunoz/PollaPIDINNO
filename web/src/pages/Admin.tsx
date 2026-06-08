@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Match, type Team } from "../api";
-import { STAGE_ORDER, sideName } from "../util";
+import { sideName } from "../util";
 import { TeamSelect } from "../components/TeamSelect";
 
 export function Admin() {
@@ -28,10 +28,21 @@ export function Admin() {
 
 // ----------------------------------------------------------------- resultados
 
+type KoFilter = 'r32' | 'r16' | 'qf' | 'sf' | 'endgame';
+
+const KO_ADMIN: { key: KoFilter; label: string }[] = [
+  { key: 'r32',     label: '16avos' },
+  { key: 'r16',     label: 'Octavos' },
+  { key: 'qf',      label: 'Cuartos' },
+  { key: 'sf',      label: 'Semis' },
+  { key: 'endgame', label: '3º / Final' },
+];
+
 function AdminResults() {
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [sel, setSel] = useState<string>("A");
+  const [sel, setSel] = useState<string>(“A”);
+  const [koStage, setKoStage] = useState<KoFilter>(“r32”);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,8 +61,8 @@ function AdminResults() {
     return [...set].sort();
   }, [matches]);
 
-  if (error) return <p className="err center">{error}</p>;
-  if (!matches) return <p className="muted center">cargando…</p>;
+  if (error) return <p className=”err center”>{error}</p>;
+  if (!matches) return <p className=”muted center”>cargando…</p>;
 
   async function recalcular() {
     setMsg(null);
@@ -60,43 +71,54 @@ function AdminResults() {
       setMsg(`Cuadro recalculado (${assigned} cupos asignados).`);
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+      setError(e instanceof Error ? e.message : “Error”);
     }
   }
 
+  const koStages = koStage === “endgame” ? [“third”, “final”] : [koStage];
+
   const list =
-    sel === "elim"
-      ? STAGE_ORDER.filter((s) => s !== "group").flatMap((s) =>
-          matches.filter((m) => m.stage === s).sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt))
-        )
+    sel === “elim”
+      ? matches
+          .filter((m) => koStages.includes(m.stage))
+          .sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt))
       : matches
-          .filter((m) => m.stage === "group" && m.grp === sel)
+          .filter((m) => m.stage === “group” && m.grp === sel)
           .sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt));
 
   return (
     <div>
-      <div className="admin-toolbar">
-        <div className="subnav">
+      <div className=”admin-toolbar”>
+        <div className=”subnav”>
           {groups.map((g) => (
-            <button key={g} className={sel === g ? "active" : ""} onClick={() => setSel(g)}>
+            <button key={g} className={sel === g ? “active” : “”} onClick={() => setSel(g)}>
               {g}
             </button>
           ))}
-          <button className={sel === "elim" ? "active" : ""} onClick={() => setSel("elim")}>
+          <button className={sel === “elim” ? “active” : “”} onClick={() => setSel(“elim”)}>
             Eliminatorias
           </button>
         </div>
-        <button className="btn" onClick={recalcular} title="Vuelve a armar las llaves desde los resultados">
+        <button className=”btn” onClick={recalcular} title=”Vuelve a armar las llaves desde los resultados”>
           ↻ Recalcular cuadro
         </button>
       </div>
-      {msg && <p className="hint ok">{msg}</p>}
+      {msg && <p className=”hint ok”>{msg}</p>}
 
-      {sel === "elim" && (
-        <p className="muted small">
-          Los equipos se completan solos al publicar resultados. Si necesitas corregir, puedes
-          fijar los equipos a mano o usar “Recalcular cuadro”.
-        </p>
+      {sel === “elim” && (
+        <>
+          <div className=”subnav”>
+            {KO_ADMIN.map(({ key, label }) => (
+              <button key={key} className={koStage === key ? “active” : “”} onClick={() => setKoStage(key)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className=”muted small”>
+            Los equipos se completan solos al publicar resultados. Si necesitas corregir, puedes
+            fijar los equipos a mano o usar “Recalcular cuadro”.
+          </p>
+        </>
       )}
 
       {list.map((m) => (
