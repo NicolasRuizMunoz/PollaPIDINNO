@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.build.json",
     "seed": "tsx src/seed.ts",
+    "restore": "tsx src/restore.ts",
     "selftest": "tsx src/selftest.ts"
   },
   "dependencies": {

@@ -22,6 +22,7 @@ import {
   areBonosLocked,
   bonosDeadline,
   leaderboard,
+  displayName,
 } from "./queries.js";
 import { groupStandings, completeGroups, bestThirds, resolveBracket } from "./advancement.js";
 import { scoreMatch } from "./scoring.js";
@@ -178,8 +179,8 @@ app.get(
     }>("SELECT id, home_score, away_score, finished FROM matches WHERE id = ?", [matchId]);
     if (!match) throw new HttpError(404, "Partido no existe");
 
-    const rows = await dbAll<{ apodo: string; home_score: number; away_score: number }>(
-      `SELECT u.apodo, p.home_score, p.away_score
+    const rows = await dbAll<{ apodo: string; email: string; home_score: number; away_score: number }>(
+      `SELECT u.apodo, u.email, p.home_score, p.away_score
        FROM predictions p JOIN users u ON u.id = p.user_id
        WHERE p.match_id = ? ORDER BY u.apodo`,
       [matchId]
@@ -187,14 +188,14 @@ app.get(
 
     const revealed = !!match.finished && match.home_score !== null && match.away_score !== null;
     if (!revealed) {
-      ok(res, { revealed: false, count: rows.length, confirmed: rows.map((r) => ({ apodo: r.apodo })) });
+      ok(res, { revealed: false, count: rows.length, confirmed: rows.map((r) => ({ apodo: displayName(r.apodo, r.email) })) });
       return;
     }
 
     const actual = { home: match.home_score!, away: match.away_score! };
     const predictions = rows
       .map((r) => ({
-        apodo: r.apodo,
+        apodo: displayName(r.apodo, r.email),
         home: r.home_score,
         away: r.away_score,
         points: scoreMatch({ home: r.home_score, away: r.away_score }, actual),
@@ -374,9 +375,46 @@ app.get(
   requireAdmin,
   ah(async (_req, res) => {
     const users = await dbAll(
-      "SELECT id, email, apodo, is_admin, created_at FROM users ORDER BY id"
+      "SELECT id, email, apodo, is_admin, is_active, created_at FROM users ORDER BY id"
     );
     ok(res, users);
+  })
+);
+
+app.put(
+  "/api/admin/users/:id/active",
+  requireAdmin,
+  ah(async (req, res) => {
+    const id = Number(req.params.id);
+    const { active } = req.body ?? {};
+    if (typeof active !== "boolean") throw new HttpError(400, "Falta el campo active");
+    await dbRun("UPDATE users SET is_active = ? WHERE id = ?", [active ? 1 : 0, id]);
+    ok(res, { id, active });
+  })
+);
+
+app.get(
+  "/api/admin/backup",
+  requireAdmin,
+  ah(async (_req, res) => {
+    const [users, matches, predictions, tournamentPicks, settings] = await Promise.all([
+      dbAll("SELECT * FROM users ORDER BY id"),
+      dbAll("SELECT * FROM matches ORDER BY id"),
+      dbAll("SELECT * FROM predictions ORDER BY id"),
+      dbAll("SELECT * FROM tournament_picks ORDER BY user_id"),
+      dbAll("SELECT * FROM settings"),
+    ]);
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      users,
+      matches,
+      predictions,
+      tournamentPicks,
+      settings,
+    };
+    res.setHeader("Content-Disposition", `attachment; filename="polla-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+    res.setHeader("Content-Type", "application/json");
+    res.send(JSON.stringify(backup, null, 2));
   })
 );
 

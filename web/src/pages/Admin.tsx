@@ -4,7 +4,7 @@ import { STAGE_ORDER, sideName } from "../util";
 import { TeamSelect } from "../components/TeamSelect";
 
 export function Admin() {
-  const [sub, setSub] = useState<"resultados" | "torneo">("resultados");
+  const [sub, setSub] = useState<"resultados" | "torneo" | "usuarios">("resultados");
   return (
     <div>
       <h2>Administración</h2>
@@ -15,8 +15,13 @@ export function Admin() {
         <button className={sub === "torneo" ? "active" : ""} onClick={() => setSub("torneo")}>
           Bonos y ajustes
         </button>
+        <button className={sub === "usuarios" ? "active" : ""} onClick={() => setSub("usuarios")}>
+          Usuarios
+        </button>
       </div>
-      {sub === "resultados" ? <AdminResults /> : <AdminTournament />}
+      {sub === "resultados" && <AdminResults />}
+      {sub === "torneo" && <AdminTournament />}
+      {sub === "usuarios" && <AdminUsers />}
     </div>
   );
 }
@@ -290,6 +295,117 @@ function AdminTournament() {
 
       {msg && <p className="hint ok">{msg}</p>}
       {error && <p className="err">{error}</p>}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------- usuarios
+
+type AdminUser = {
+  id: number;
+  email: string;
+  apodo: string;
+  is_admin: number;
+  is_active: number;
+  created_at: string;
+};
+
+function maskEmail(email: string): string {
+  const at = email.indexOf("@");
+  if (at <= 0) return email;
+  return `${email[0]}***${email.slice(at)}`;
+}
+
+function AdminUsers() {
+  const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  function reload() {
+    api.adminUsers().then(setUsers).catch((e: Error) => setError(e.message));
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  async function downloadBackup() {
+    setDownloading(true);
+    try {
+      const blob = await api.adminBackup();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `polla-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al descargar backup");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function toggleActive(u: AdminUser) {
+    setBusy(u.id);
+    try {
+      await api.adminSetUserActive(u.id, u.is_active === 0);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (error) return <p className="err center">{error}</p>;
+  if (!users) return <p className="muted center">cargando...</p>;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <p className="muted small" style={{ margin: 0 }}>
+          Los usuarios <strong>inactivos</strong> no aparecen en la tabla de posiciones ni se les cuenta puntaje.
+          Activa una cuenta cuando confirmes el pago.
+        </p>
+        <button className="btn" onClick={downloadBackup} disabled={downloading}>
+          {downloading ? "Descargando…" : "⬇ Descargar backup"}
+        </button>
+      </div>
+      <table className="leaderboard">
+        <thead>
+          <tr>
+            <th>Jugador</th>
+            <th>Email</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id} style={{ opacity: u.is_active ? 1 : 0.5 }}>
+              <td>{u.apodo || <span className="muted">{maskEmail(u.email)}</span>}</td>
+              <td className="muted small">{u.email}</td>
+              <td>
+                {u.is_active ? (
+                  <span className="tag tag-done">activo</span>
+                ) : (
+                  <span className="tag">inactivo</span>
+                )}
+                {!!u.is_admin && <span className="tag" style={{ marginLeft: 4 }}>admin</span>}
+              </td>
+              <td>
+                <button
+                  className={`btn${u.is_active ? "" : " primary"}`}
+                  disabled={busy === u.id}
+                  onClick={() => toggleActive(u)}
+                >
+                  {u.is_active ? "Desactivar" : "Activar"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

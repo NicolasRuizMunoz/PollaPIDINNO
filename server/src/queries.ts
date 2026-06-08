@@ -1,6 +1,16 @@
 import { dbAll, dbGet, getSetting } from "./db.js";
 import { scoreMatch, scoreTournament } from "./scoring.js";
 
+export function maskEmail(email: string): string {
+  const at = email.indexOf("@");
+  if (at <= 0) return email;
+  return `${email[0]}***${email.slice(at)}`;
+}
+
+export function displayName(apodo: string, email: string): string {
+  return apodo.trim() || maskEmail(email);
+}
+
 export interface TeamRow {
   id: string;
   name: string;
@@ -101,10 +111,10 @@ export interface LeaderRow {
   playedPredictions: number;
 }
 
-/** Calcula la tabla de posiciones completa. */
+/** Calcula la tabla de posiciones completa (solo usuarios activos). */
 export async function leaderboard(): Promise<LeaderRow[]> {
-  const users = await dbAll<{ id: number; apodo: string }>(
-    "SELECT id, apodo FROM users ORDER BY id"
+  const users = await dbAll<{ id: number; apodo: string; email: string }>(
+    "SELECT id, apodo, email FROM users WHERE is_active = 1 ORDER BY id"
   );
 
   const finished = (
@@ -165,7 +175,7 @@ export async function leaderboard(): Promise<LeaderRow[]> {
 
     return {
       userId: u.id,
-      apodo: u.apodo,
+      apodo: displayName(u.apodo, u.email),
       total: matchPoints + bonusPoints,
       matchPoints,
       bonusPoints,

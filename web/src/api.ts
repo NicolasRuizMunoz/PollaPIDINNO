@@ -231,4 +231,28 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
+
+  adminUsers: () =>
+    req<{ id: number; email: string; apodo: string; is_admin: number; is_active: number; created_at: string }[]>(
+      "/admin/users"
+    ),
+
+  adminSetUserActive: (id: number, active: boolean) =>
+    req<{ id: number; active: boolean }>(`/admin/users/${id}/active`, {
+      method: "PUT",
+      body: JSON.stringify({ active }),
+    }),
+
+  adminBackup: async (): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch("/api/admin/backup", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let msg = `Error ${res.status}`;
+      try { const b = await res.json(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    return res.blob();
+  },
 };

@@ -45,6 +45,7 @@ export async function initSchema(): Promise<void> {
       email      TEXT NOT NULL UNIQUE,
       apodo      TEXT NOT NULL,
       is_admin   INTEGER NOT NULL DEFAULT 0,
+      is_active  INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -107,10 +108,19 @@ export async function initSchema(): Promise<void> {
   `);
 }
 
+// Migration: add is_active to users table in existing databases
+async function runMigrations(): Promise<void> {
+  try {
+    await dbRun("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
+  } catch {
+    // Column already exists — safe to ignore
+  }
+}
+
 // asegura el esquema una sola vez por proceso (útil en serverless)
 let schemaPromise: Promise<void> | null = null;
 export function ensureSchema(): Promise<void> {
-  if (!schemaPromise) schemaPromise = initSchema();
+  if (!schemaPromise) schemaPromise = initSchema().then(runMigrations);
   return schemaPromise;
 }
 
