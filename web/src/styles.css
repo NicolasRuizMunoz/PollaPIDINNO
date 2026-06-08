@@ -177,6 +177,9 @@ h3 { margin: 18px 0 8px; font-size: 1.05rem; }
 }
 .scorebox input:focus { outline: none; border-color: var(--red); }
 .scorebox input:disabled { background: #f7f8fa; color: var(--ink); border-style: dashed; }
+.scorebox input::-webkit-outer-spin-button,
+.scorebox input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.scorebox input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .vs { color: var(--muted); }
 
 .match-result {

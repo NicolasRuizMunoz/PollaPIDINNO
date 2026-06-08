@@ -103,8 +103,8 @@ export function MatchCard({
         </div>
 
         <div className="team away">
-          <Flag teamId={match.away?.id} emoji={match.away?.flag} />
           <span className="name">{sideName(match.away, match.awayLabel)}</span>
+          <Flag teamId={match.away?.id} emoji={match.away?.flag} />
         </div>
       </div>
 
