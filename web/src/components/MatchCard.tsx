@@ -4,9 +4,9 @@ import {
   formatDateTime,
   hasTeams,
   scoreBreakdown,
-  sideFlag,
   sideName,
 } from "../util";
+import { Flag } from "./Flag";
 import { PointsBadge } from "./PointsBadge";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -72,7 +72,7 @@ export function MatchCard({
 
       <div className="match-row">
         <div className="team home">
-          <span className="flag">{sideFlag(match.home)}</span>
+          <Flag teamId={match.home?.id} emoji={match.home?.flag} />
           <span className="name">{sideName(match.home, match.homeLabel)}</span>
         </div>
 
@@ -103,7 +103,7 @@ export function MatchCard({
         </div>
 
         <div className="team away">
-          <span className="flag">{sideFlag(match.away)}</span>
+          <Flag teamId={match.away?.id} emoji={match.away?.flag} />
           <span className="name">{sideName(match.away, match.awayLabel)}</span>
         </div>
       </div>

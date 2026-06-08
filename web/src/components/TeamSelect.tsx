@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Team } from "../api";
+import { Flag } from "./Flag";
 
 /** Selector de equipo con búsqueda: escribes y filtra el listado. */
 export function TeamSelect({
@@ -74,7 +75,7 @@ export function TeamSelect({
                 setOpen(false);
               }}
             >
-              <span className="flag">{t.flag}</span> {t.name}
+              <Flag teamId={t.id} emoji={t.flag} size={16} /> {t.name}
             </li>
           ))}
         </ul>

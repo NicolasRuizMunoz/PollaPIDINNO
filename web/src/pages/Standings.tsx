@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type StandingsResponse } from "../api";
+import { Flag } from "../components/Flag";
 
 export function Standings() {
   const [data, setData] = useState<StandingsResponse | null>(null);
@@ -38,7 +39,7 @@ export function Standings() {
                   <tr key={r.teamId} className={r.qualifies ? "qual" : ""}>
                     <td className="pos">{r.position}</td>
                     <td>
-                      <span className="flag">{r.flag ?? "🏳️"}</span> {r.name}
+                      <Flag teamId={r.teamId} emoji={r.flag} /> {r.name}
                     </td>
                     <td className="mono">{r.played}</td>
                     <td className="mono">{r.gd > 0 ? `+${r.gd}` : r.gd}</td>
@@ -57,7 +58,7 @@ export function Standings() {
           <div className="chips">
             {data.bestThirds.map((t) => (
               <span key={t.id} className="chip qual">
-                {t.flag ?? "🏳️"} {t.name}
+                <Flag teamId={t.id} emoji={t.flag} /> {t.name}
               </span>
             ))}
           </div>
