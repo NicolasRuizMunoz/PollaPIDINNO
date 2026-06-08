@@ -5,12 +5,13 @@
  *
  * Las FECHAS y HORARIOS son aproximados (ventana real del torneo: 11 jun - 19 jul
  * 2026) y se pueden ajustar uno por uno desde el panel de administracion.
- * Los equipos y grupos sí son los del sorteo oficial.
  *
- * Ejecutar:  npm run seed   (esto BORRA equipos y partidos previos)
+ * Ejecutar:  npm run seed        (usa la base de db.ts: Turso si esta configurado,
+ *                                 o file:polla.db local). ⚠️ BORRA equipos y partidos.
  */
 import "dotenv/config";
-import { db, initSchema } from "./db.js";
+import { pathToFileURL } from "node:url";
+import { dbRun, initSchema, db } from "./db.js";
 
 interface SeedTeam {
   id: string;
@@ -18,7 +19,6 @@ interface SeedTeam {
   flag: string;
 }
 
-// 12 grupos del sorteo final. Orden = posicion de siembra dentro del grupo.
 const GROUPS: Record<string, SeedTeam[]> = {
   A: [
     { id: "MEX", name: "México", flag: "🇲🇽" },
@@ -94,60 +94,63 @@ const GROUPS: Record<string, SeedTeam[]> = {
   ],
 };
 
-/** ISO UTC a partir de y-m-d y hora. */
 function iso(y: number, m: number, d: number, h: number): string {
   return new Date(Date.UTC(y, m - 1, d, h, 0, 0)).toISOString();
 }
 
-/** Texto legible para una fuente de cupo (mientras no se conoce el equipo). */
 function srcLabel(src: string): string {
   const [kind, arg] = src.split(":");
   switch (kind) {
-    case "WG":
-      return `1º Grupo ${arg}`;
-    case "RU":
-      return `2º Grupo ${arg}`;
-    case "TH":
-      return `Mejor 3º (${arg})`;
-    case "WM":
-      return `Ganador ${arg}`;
-    case "LM":
-      return `Perdedor ${arg}`;
-    default:
-      return "Por definir";
+    case "WG": return `1º Grupo ${arg}`;
+    case "RU": return `2º Grupo ${arg}`;
+    case "TH": return `Mejor 3º (${arg})`;
+    case "WM": return `Ganador ${arg}`;
+    case "LM": return `Perdedor ${arg}`;
+    default: return "Por definir";
   }
 }
 
-// pares de la liguilla (round-robin) para 4 equipos por jornada
 const ROUND_ROBIN: [number, number][][] = [
-  [
-    [0, 1],
-    [2, 3],
-  ], // jornada 1
-  [
-    [0, 2],
-    [3, 1],
-  ], // jornada 2
-  [
-    [0, 3],
-    [1, 2],
-  ], // jornada 3
+  [[0, 1], [2, 3]],
+  [[0, 2], [3, 1]],
+  [[0, 3], [1, 2]],
 ];
 
-function seed() {
-  initSchema();
+const MATCH_COLS =
+  "code, stage, grp, matchday, label, home_team, away_team, home_label, away_label, home_src, away_src, kickoff_at, venue";
+
+interface MatchInsert {
+  code: string | null;
+  stage: string;
+  grp: string | null;
+  matchday: number | null;
+  label: string;
+  home_team: string | null;
+  away_team: string | null;
+  home_label: string | null;
+  away_label: string | null;
+  home_src: string | null;
+  away_src: string | null;
+  kickoff_at: string;
+  venue: string | null;
+}
+
+async function insertMatch(m: MatchInsert) {
+  await dbRun(
+    `INSERT INTO matches (${MATCH_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      m.code, m.stage, m.grp, m.matchday, m.label, m.home_team, m.away_team,
+      m.home_label, m.away_label, m.home_src, m.away_src, m.kickoff_at, m.venue,
+    ]
+  );
+}
+
+export async function seed() {
+  await initSchema();
 
   console.log("Limpiando datos previos de equipos y partidos...");
-  db.exec("DELETE FROM predictions;");
-  db.exec("DELETE FROM matches;");
-  db.exec("DELETE FROM teams;");
-
-  const insTeam = db.prepare(
-    "INSERT INTO teams (id, name, flag, grp) VALUES (?, ?, ?, ?)"
-  );
-  const insMatch = db.prepare(
-    `INSERT INTO matches (code, stage, grp, matchday, label, home_team, away_team, home_label, away_label, home_src, away_src, kickoff_at, venue)
-     VALUES (@code, @stage, @grp, @matchday, @label, @home_team, @away_team, @home_label, @away_label, @home_src, @away_src, @kickoff_at, @venue)`
+  await db.executeMultiple(
+    "DELETE FROM predictions; DELETE FROM matches; DELETE FROM teams;"
   );
 
   const groupLetters = Object.keys(GROUPS);
@@ -156,23 +159,27 @@ function seed() {
   let teamCount = 0;
   for (const letter of groupLetters) {
     for (const t of GROUPS[letter]) {
-      insTeam.run(t.id, t.name, t.flag, letter);
+      await dbRun("INSERT INTO teams (id, name, flag, grp) VALUES (?, ?, ?, ?)", [
+        t.id, t.name, t.flag, letter,
+      ]);
       teamCount++;
     }
   }
 
   // partidos de grupos
   let groupMatches = 0;
-  groupLetters.forEach((letter, g) => {
+  for (let g = 0; g < groupLetters.length; g++) {
+    const letter = groupLetters[g];
     const teams = GROUPS[letter];
-    ROUND_ROBIN.forEach((jornada, j) => {
-      // jornada 1: 11-16 jun, jornada 2: 17-22 jun, jornada 3: 23-27 jun
+    for (let j = 0; j < ROUND_ROBIN.length; j++) {
       const baseDay = [11, 17, 23][j];
       const span = [6, 6, 5][j];
       const day = baseDay + (g % span);
-      jornada.forEach(([a, b], k) => {
-        const hour = 18 + ((g + k) % 2) * 3; // 18:00 o 21:00 UTC
-        insMatch.run({
+      const jornada = ROUND_ROBIN[j];
+      for (let k = 0; k < jornada.length; k++) {
+        const [a, b] = jornada[k];
+        const hour = 18 + ((g + k) % 2) * 3;
+        await insertMatch({
           code: null,
           stage: "group",
           grp: letter,
@@ -188,26 +195,13 @@ function seed() {
           venue: null,
         });
         groupMatches++;
-      });
-    });
-  });
+      }
+    }
+  }
 
-  // Cuadro de eliminatorias. Cada cupo se define por su "fuente":
-  //   WG:A ganador grupo A · RU:A segundo grupo A · TH:n mejor tercero n
-  //   WM:Mx ganador del partido Mx · LM:Sx perdedor del partido Sx
-  // El motor de avance (advancement.ts) los va resolviendo con los resultados.
-  type KO = {
-    code: string;
-    stage: string;
-    label: string;
-    home: string;
-    away: string;
-    m: number; // mes
-    d: number; // dia
-    h: number; // hora UTC
-  };
+  // eliminatorias
+  type KO = { code: string; stage: string; label: string; home: string; away: string; m: number; d: number; h: number };
   const KNOCKOUT: KO[] = [
-    // Dieciseisavos de final (Round of 32)
     { code: "M1", stage: "r32", label: "Dieciseisavos #1", home: "WG:A", away: "TH:1", m: 6, d: 28, h: 18 },
     { code: "M2", stage: "r32", label: "Dieciseisavos #2", home: "WG:B", away: "TH:2", m: 6, d: 28, h: 21 },
     { code: "M3", stage: "r32", label: "Dieciseisavos #3", home: "WG:C", away: "TH:3", m: 6, d: 29, h: 18 },
@@ -224,7 +218,6 @@ function seed() {
     { code: "M14", stage: "r32", label: "Dieciseisavos #14", home: "RU:B", away: "RU:C", m: 7, d: 2, h: 15 },
     { code: "M15", stage: "r32", label: "Dieciseisavos #15", home: "RU:E", away: "RU:H", m: 7, d: 3, h: 15 },
     { code: "M16", stage: "r32", label: "Dieciseisavos #16", home: "RU:F", away: "RU:G", m: 6, d: 30, h: 15 },
-    // Octavos de final
     { code: "O1", stage: "r16", label: "Octavos #1", home: "WM:M1", away: "WM:M2", m: 7, d: 4, h: 18 },
     { code: "O2", stage: "r16", label: "Octavos #2", home: "WM:M3", away: "WM:M4", m: 7, d: 4, h: 21 },
     { code: "O3", stage: "r16", label: "Octavos #3", home: "WM:M5", away: "WM:M6", m: 7, d: 5, h: 18 },
@@ -233,22 +226,19 @@ function seed() {
     { code: "O6", stage: "r16", label: "Octavos #6", home: "WM:M11", away: "WM:M12", m: 7, d: 6, h: 21 },
     { code: "O7", stage: "r16", label: "Octavos #7", home: "WM:M13", away: "WM:M14", m: 7, d: 7, h: 18 },
     { code: "O8", stage: "r16", label: "Octavos #8", home: "WM:M15", away: "WM:M16", m: 7, d: 7, h: 21 },
-    // Cuartos de final
     { code: "Q1", stage: "qf", label: "Cuartos #1", home: "WM:O1", away: "WM:O2", m: 7, d: 9, h: 18 },
     { code: "Q2", stage: "qf", label: "Cuartos #2", home: "WM:O3", away: "WM:O4", m: 7, d: 9, h: 21 },
     { code: "Q3", stage: "qf", label: "Cuartos #3", home: "WM:O5", away: "WM:O6", m: 7, d: 11, h: 18 },
     { code: "Q4", stage: "qf", label: "Cuartos #4", home: "WM:O7", away: "WM:O8", m: 7, d: 11, h: 21 },
-    // Semifinales
     { code: "S1", stage: "sf", label: "Semifinal #1", home: "WM:Q1", away: "WM:Q2", m: 7, d: 14, h: 19 },
     { code: "S2", stage: "sf", label: "Semifinal #2", home: "WM:Q3", away: "WM:Q4", m: 7, d: 15, h: 19 },
-    // Tercer puesto y Final
     { code: "3P", stage: "third", label: "Tercer puesto", home: "LM:S1", away: "LM:S2", m: 7, d: 18, h: 19 },
     { code: "F1", stage: "final", label: "Final", home: "WM:S1", away: "WM:S2", m: 7, d: 19, h: 19 },
   ];
 
   let koMatches = 0;
   for (const k of KNOCKOUT) {
-    insMatch.run({
+    await insertMatch({
       code: k.code,
       stage: k.stage,
       grp: null,
@@ -269,9 +259,17 @@ function seed() {
   console.log(
     `Listo: ${teamCount} equipos, ${groupMatches} partidos de grupos, ${koMatches} de eliminatorias.`
   );
-  console.log(
-    "Ajusta fechas, horarios y los equipos de las eliminatorias desde el panel de admin."
-  );
+  console.log("Ajusta fechas, horarios y equipos de eliminatorias desde el panel de admin.");
 }
 
-seed();
+// auto-ejecutar solo si se corre directamente (no al importarlo desde el self-test)
+const isMain =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  seed()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
+}

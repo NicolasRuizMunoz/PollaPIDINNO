@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import type { Request, Response, NextFunction } from "express";
-import { db } from "./db.js";
+import { dbGet, dbRun } from "./db.js";
 
 export interface User {
   id: number;
@@ -29,36 +29,31 @@ export function needsApodo(user: User): boolean {
 }
 
 /** Crea o recupera un usuario por email. El apodo arranca vacio. */
-function getOrCreateUser(emailRaw: string): User {
+async function getOrCreateUser(emailRaw: string): Promise<User> {
   const email = emailRaw.trim().toLowerCase();
   if (!isEmail(email)) throw new HttpError(400, "Email invalido");
 
-  const existing = db.prepare("SELECT * FROM users WHERE email = ?").get(email) as
-    | User
-    | undefined;
+  const existing = await dbGet<User>("SELECT * FROM users WHERE email = ?", [email]);
   if (existing) return existing;
 
-  const usersCount = (
-    db.prepare("SELECT COUNT(*) AS c FROM users").get() as { c: number }
-  ).c;
-  const isAdmin = usersCount === 0 || ADMIN_EMAILS.includes(email) ? 1 : 0;
-  const info = db
-    .prepare("INSERT INTO users (email, apodo, is_admin) VALUES (?, '', ?)")
-    .run(email, isAdmin);
+  const countRow = await dbGet<{ c: number }>("SELECT COUNT(*) AS c FROM users");
+  const isAdmin =
+    (countRow?.c ?? 0) === 0 || ADMIN_EMAILS.includes(email) ? 1 : 0;
+  const res = await dbRun(
+    "INSERT INTO users (email, apodo, is_admin) VALUES (?, '', ?)",
+    [email, isAdmin]
+  );
   return {
-    id: Number(info.lastInsertRowid),
+    id: Number(res.lastInsertRowid),
     email,
     apodo: "",
     is_admin: isAdmin,
   };
 }
 
-function createSession(userId: number): string {
+async function createSession(userId: number): Promise<string> {
   const token = randomBytes(24).toString("hex");
-  db.prepare("INSERT INTO sessions (token, user_id) VALUES (?, ?)").run(
-    token,
-    userId
-  );
+  await dbRun("INSERT INTO sessions (token, user_id) VALUES (?, ?)", [token, userId]);
   return token;
 }
 
@@ -80,42 +75,40 @@ export async function loginWithGoogle(idToken: string): Promise<LoginResult> {
       idToken,
       audience: GOOGLE_CLIENT_ID,
     });
-    const payload = ticket.getPayload();
-    if (payload?.email_verified) email = payload.email;
-    else email = payload?.email;
+    email = ticket.getPayload()?.email;
   } catch {
     throw new HttpError(401, "Token de Google invalido");
   }
   if (!email) throw new HttpError(401, "Google no entrego un email");
 
-  const user = getOrCreateUser(email);
-  return { token: createSession(user.id), user, needsApodo: needsApodo(user) };
+  const user = await getOrCreateUser(email);
+  return { token: await createSession(user.id), user, needsApodo: needsApodo(user) };
 }
 
 /** Login de desarrollo por email (solo si Google no esta configurado). */
-export function loginDev(emailRaw: string): LoginResult {
+export async function loginDev(emailRaw: string): Promise<LoginResult> {
   if (GOOGLE_CLIENT_ID)
     throw new HttpError(403, "El login de desarrollo esta deshabilitado");
-  const user = getOrCreateUser(emailRaw);
-  return { token: createSession(user.id), user, needsApodo: needsApodo(user) };
+  const user = await getOrCreateUser(emailRaw);
+  return { token: await createSession(user.id), user, needsApodo: needsApodo(user) };
 }
 
 /** Asigna o actualiza el apodo del usuario. */
-export function setApodo(userId: number, apodoRaw: string): User {
+export async function setApodo(userId: number, apodoRaw: string): Promise<User> {
   const apodo = apodoRaw.trim();
   if (apodo.length < 2) throw new HttpError(400, "El apodo es muy corto");
   if (apodo.length > 24) throw new HttpError(400, "El apodo es muy largo");
-  db.prepare("UPDATE users SET apodo = ? WHERE id = ?").run(apodo, userId);
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as unknown as User;
+  await dbRun("UPDATE users SET apodo = ? WHERE id = ?", [apodo, userId]);
+  const u = await dbGet<User>("SELECT * FROM users WHERE id = ?", [userId]);
+  return u!;
 }
 
-function userFromToken(token: string | undefined): User | null {
+async function userFromToken(token: string | undefined): Promise<User | null> {
   if (!token) return null;
-  const row = db
-    .prepare(
-      `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`
-    )
-    .get(token) as User | undefined;
+  const row = await dbGet<User>(
+    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`,
+    [token]
+  );
   return row ?? null;
 }
 
@@ -124,16 +117,20 @@ export interface AuthedRequest extends Request {
 }
 
 /** Resuelve el usuario del header Authorization si existe (no obliga). */
-export function attachUser(
+export async function attachUser(
   req: AuthedRequest,
   _res: Response,
   next: NextFunction
-): void {
-  const header = req.header("authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-  const user = userFromToken(token);
-  if (user) req.user = user;
-  next();
+): Promise<void> {
+  try {
+    const header = req.header("authorization") ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+    const user = await userFromToken(token);
+    if (user) req.user = user;
+    next();
+  } catch (e) {
+    next(e);
+  }
 }
 
 export function requireAuth(

@@ -1,17 +1,39 @@
-import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { createClient, type Client, type InArgs } from "@libsql/client";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH ?? join(__dirname, "..", "polla.db");
+/**
+ * Cliente de base de datos (libSQL / Turso).
+ *
+ * - En producción (Vercel): define TURSO_DATABASE_URL y TURSO_AUTH_TOKEN.
+ * - En local/desarrollo: si no hay TURSO_DATABASE_URL, usa un archivo SQLite
+ *   local (file:polla.db), así puedes trabajar sin Turso.
+ */
+const url = process.env.TURSO_DATABASE_URL ?? "file:polla.db";
+const authToken = process.env.TURSO_AUTH_TOKEN;
 
-export const db = new DatabaseSync(DB_PATH);
+export const db: Client = createClient({ url, authToken, intMode: "number" });
 
-db.exec("PRAGMA journal_mode = WAL;");
-db.exec("PRAGMA foreign_keys = ON;");
+// ---- helpers async (reemplazan al prepare().get()/all()/run() síncrono) ----
 
-export function initSchema(): void {
-  db.exec(`
+export async function dbAll<T>(sql: string, args: InArgs = []): Promise<T[]> {
+  const r = await db.execute({ sql, args });
+  return r.rows as unknown as T[];
+}
+
+export async function dbGet<T>(sql: string, args: InArgs = []): Promise<T | undefined> {
+  const r = await db.execute({ sql, args });
+  return (r.rows[0] as unknown as T) ?? undefined;
+}
+
+export async function dbRun(sql: string, args: InArgs = []) {
+  return db.execute({ sql, args });
+}
+
+// ---- esquema ----
+
+export async function initSchema(): Promise<void> {
+  await db.executeMultiple(`
+    PRAGMA foreign_keys = ON;
+
     CREATE TABLE IF NOT EXISTS users (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       email      TEXT NOT NULL UNIQUE,
@@ -21,28 +43,28 @@ export function initSchema(): void {
     );
 
     CREATE TABLE IF NOT EXISTS teams (
-      id    TEXT PRIMARY KEY,          -- codigo, ej "ARG"
-      name  TEXT NOT NULL,             -- "Argentina"
-      flag  TEXT,                      -- emoji bandera
-      grp   TEXT                       -- grupo "A".."L" (null si por definir)
+      id    TEXT PRIMARY KEY,
+      name  TEXT NOT NULL,
+      flag  TEXT,
+      grp   TEXT
     );
 
     CREATE TABLE IF NOT EXISTS matches (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      code         TEXT,                     -- codigo estable de eliminatoria: M1..M16, O1..O8, Q1..Q4, S1..S2, F1, 3P
-      stage        TEXT NOT NULL,            -- group | r32 | r16 | qf | sf | final | third
-      grp          TEXT,                     -- grupo si aplica
-      matchday     INTEGER,                  -- jornada (1,2,3) en fase de grupos
-      label        TEXT,                     -- "Grupo A · J1", "Octavos #1", etc.
+      code         TEXT,
+      stage        TEXT NOT NULL,
+      grp          TEXT,
+      matchday     INTEGER,
+      label        TEXT,
       home_team    TEXT REFERENCES teams(id),
       away_team    TEXT REFERENCES teams(id),
-      home_label   TEXT,                     -- texto mientras el equipo no se conoce
+      home_label   TEXT,
       away_label   TEXT,
-      home_src     TEXT,                     -- fuente del equipo local (WG:A, RU:B, TH:1, WM:M1, LM:S1)
+      home_src     TEXT,
       away_src     TEXT,
-      kickoff_at   TEXT NOT NULL,            -- ISO datetime UTC
+      kickoff_at   TEXT NOT NULL,
       venue        TEXT,
-      home_score   INTEGER,                  -- null = no jugado
+      home_score   INTEGER,
       away_score   INTEGER,
       finished     INTEGER NOT NULL DEFAULT 0
     );
@@ -66,7 +88,6 @@ export function initSchema(): void {
       updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    -- configuracion clave/valor (resultados de torneo, fecha de cierre de bonos, etc.)
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
       value TEXT
@@ -80,18 +101,27 @@ export function initSchema(): void {
   `);
 }
 
-// ---- helpers de settings ----
+// asegura el esquema una sola vez por proceso (útil en serverless)
+let schemaPromise: Promise<void> | null = null;
+export function ensureSchema(): Promise<void> {
+  if (!schemaPromise) schemaPromise = initSchema();
+  return schemaPromise;
+}
 
-export function getSetting(key: string): string | null {
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
-    | { value: string }
-    | undefined;
+// ---- settings ----
+
+export async function getSetting(key: string): Promise<string | null> {
+  const row = await dbGet<{ value: string }>(
+    "SELECT value FROM settings WHERE key = ?",
+    [key]
+  );
   return row?.value ?? null;
 }
 
-export function setSetting(key: string, value: string | null): void {
-  db.prepare(
+export async function setSetting(key: string, value: string | null): Promise<void> {
+  await dbRun(
     `INSERT INTO settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-  ).run(key, value);
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    [key, value]
+  );
 }

@@ -1,4 +1,4 @@
-import { db, getSetting } from "./db.js";
+import { dbAll, dbGet, getSetting } from "./db.js";
 import { scoreMatch, scoreTournament } from "./scoring.js";
 
 export interface TeamRow {
@@ -24,17 +24,16 @@ interface MatchRow {
   finished: number;
 }
 
-const teamById = new Map<string, TeamRow>();
-export function refreshTeamCache(): void {
-  teamById.clear();
-  for (const t of db.prepare("SELECT * FROM teams").all() as unknown as TeamRow[]) {
-    teamById.set(t.id, t);
-  }
+export type TeamMap = Map<string, TeamRow>;
+
+export async function loadTeamMap(): Promise<TeamMap> {
+  const teams = await dbAll<TeamRow>("SELECT * FROM teams");
+  return new Map(teams.map((t) => [t.id, t]));
 }
 
-function team(id: string | null) {
+function team(id: string | null, teams: TeamMap) {
   if (!id) return null;
-  const t = teamById.get(id);
+  const t = teams.get(id);
   return t ? { id: t.id, name: t.name, flag: t.flag } : null;
 }
 
@@ -42,34 +41,27 @@ export function isMatchLocked(kickoffAt: string): boolean {
   return Date.now() >= new Date(kickoffAt).getTime();
 }
 
-/**
- * Fecha de cierre de los bonos (campeon, subcampeon, goleador, mejor arquero).
- * Por defecto: la hora del ULTIMO partido de la jornada 1 de la fase de grupos
- * (cuando ya se jugo la primera fecha de todos los grupos). El admin lo puede
- * sobreescribir con un setting.
- */
-export function bonosDeadline(): string | null {
-  const explicit = getSetting("bonos_deadline");
+/** Fecha de cierre de los bonos: el ultimo partido de la jornada 1 de grupos. */
+export async function bonosDeadline(): Promise<string | null> {
+  const explicit = await getSetting("bonos_deadline");
   if (explicit) return explicit;
-  const row = db
-    .prepare(
-      "SELECT MAX(kickoff_at) AS last FROM matches WHERE stage = 'group' AND matchday = 1"
-    )
-    .get() as { last: string | null };
-  if (row.last) return row.last;
-  const fallback = db
-    .prepare("SELECT MIN(kickoff_at) AS first FROM matches")
-    .get() as { first: string | null };
-  return fallback.first ?? null;
+  const row = await dbGet<{ last: string | null }>(
+    "SELECT MAX(kickoff_at) AS last FROM matches WHERE stage = 'group' AND matchday = 1"
+  );
+  if (row?.last) return row.last;
+  const fb = await dbGet<{ first: string | null }>(
+    "SELECT MIN(kickoff_at) AS first FROM matches"
+  );
+  return fb?.first ?? null;
 }
 
-export function areBonosLocked(): boolean {
-  const deadline = bonosDeadline();
+export async function areBonosLocked(): Promise<boolean> {
+  const deadline = await bonosDeadline();
   if (!deadline) return false;
   return Date.now() >= new Date(deadline).getTime();
 }
 
-export function shapeMatch(m: MatchRow) {
+export function shapeMatch(m: MatchRow, teams: TeamMap) {
   return {
     id: m.id,
     stage: m.stage,
@@ -77,8 +69,8 @@ export function shapeMatch(m: MatchRow) {
     label: m.label,
     kickoffAt: m.kickoff_at,
     venue: m.venue,
-    home: team(m.home_team),
-    away: team(m.away_team),
+    home: team(m.home_team, teams),
+    away: team(m.away_team, teams),
     homeLabel: m.home_label,
     awayLabel: m.away_label,
     homeScore: m.home_score,
@@ -88,10 +80,8 @@ export function shapeMatch(m: MatchRow) {
   };
 }
 
-export function allMatches(): MatchRow[] {
-  return db
-    .prepare("SELECT * FROM matches ORDER BY kickoff_at, id")
-    .all() as unknown as MatchRow[];
+export async function allMatches(): Promise<MatchRow[]> {
+  return dbAll<MatchRow>("SELECT * FROM matches ORDER BY kickoff_at, id");
 }
 
 interface PredRow {
@@ -112,17 +102,17 @@ export interface LeaderRow {
 }
 
 /** Calcula la tabla de posiciones completa. */
-export function leaderboard(): LeaderRow[] {
-  const users = db
-    .prepare("SELECT id, apodo FROM users ORDER BY id")
-    .all() as { id: number; apodo: string }[];
+export async function leaderboard(): Promise<LeaderRow[]> {
+  const users = await dbAll<{ id: number; apodo: string }>(
+    "SELECT id, apodo FROM users ORDER BY id"
+  );
 
   const finished = (
-    db.prepare("SELECT * FROM matches WHERE finished = 1").all() as unknown as MatchRow[]
+    await dbAll<MatchRow>("SELECT * FROM matches WHERE finished = 1")
   ).filter((m) => m.home_score !== null && m.away_score !== null);
   const finishedById = new Map(finished.map((m) => [m.id, m]));
 
-  const preds = db.prepare("SELECT * FROM predictions").all() as unknown as PredRow[];
+  const preds = await dbAll<PredRow>("SELECT * FROM predictions");
   const predsByUser = new Map<number, PredRow[]>();
   for (const p of preds) {
     if (!predsByUser.has(p.user_id)) predsByUser.set(p.user_id, []);
@@ -130,18 +120,18 @@ export function leaderboard(): LeaderRow[] {
   }
 
   const results = {
-    champion: getSetting("result_champion"),
-    runnerUp: getSetting("result_runner_up"),
-    topScorer: getSetting("result_top_scorer"),
-    bestGoalkeeper: getSetting("result_best_goalkeeper"),
+    champion: await getSetting("result_champion"),
+    runnerUp: await getSetting("result_runner_up"),
+    topScorer: await getSetting("result_top_scorer"),
+    bestGoalkeeper: await getSetting("result_best_goalkeeper"),
   };
-  const bonusPicks = db.prepare("SELECT * FROM tournament_picks").all() as {
+  const bonusPicks = await dbAll<{
     user_id: number;
     champion: string | null;
     runner_up: string | null;
     top_scorer: string | null;
     best_goalkeeper: string | null;
-  }[];
+  }>("SELECT * FROM tournament_picks");
   const bonusByUser = new Map(bonusPicks.map((b) => [b.user_id, b]));
 
   const rows: LeaderRow[] = users.map((u) => {

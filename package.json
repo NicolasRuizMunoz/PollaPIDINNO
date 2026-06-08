@@ -3,13 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "description": "Polla mundialera Copec - Mundial 2026",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm --prefix server run dev",
     "dev:web": "npm --prefix web run dev",
     "seed": "npm --prefix server run seed",
-    "install:all": "npm install && npm --prefix server install && npm --prefix web install",
-    "build": "npm --prefix web run build"
+    "selftest": "npm --prefix server run selftest",
+    "build": "npm --prefix web run build && npm --prefix server run build",
+    "vercel-build": "npm --prefix web run build && npm --prefix server run build",
+    "vercel-install": "npm install && npm --prefix server install && npm --prefix web install",
+    "install:all": "npm install && npm --prefix server install && npm --prefix web install"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
