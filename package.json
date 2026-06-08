@@ -2,6 +2,7 @@
   "name": "polla-copec",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Polla mundialera Copec - Mundial 2026",
   "engines": {
     "node": ">=18"
