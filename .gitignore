@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+
+# base de datos local
+*.db
+*.db-wal
+*.db-shm
+
+# variables de entorno
+.env
+.env.local
+
+# logs y temporales
+*.log
+.DS_Store
