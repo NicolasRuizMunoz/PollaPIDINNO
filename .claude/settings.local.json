@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s https://polla-pidinno.vercel.app/api/config)",
+      "Bash(curl -s https://polla-pidinno.vercel.app/api/matches)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('partidos:', len\\(d['matches']\\), '| primer partido:', d['matches'][0]['home']['name'] if d['matches'] else 'N/A'\\)\")",
+      "Bash(curl -s https://polla-pidinno.vercel.app/api/leaderboard)"
+    ]
+  }
+}
