@@ -96,9 +96,6 @@ export function Login({
 
         {!loading && devLogin && (
           <form onSubmit={devSubmit} className="devform">
-            <p className="muted small">
-              Modo desarrollo (sin Google configurado): entra solo con tu email.
-            </p>
             <input
               type="email"
               placeholder="tu-email@correo.com"
