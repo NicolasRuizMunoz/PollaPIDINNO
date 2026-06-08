@@ -1,14 +1,20 @@
-import { createClient, type Client, type InArgs } from "@libsql/client";
+import type { Client, InArgs } from "@libsql/client";
 
 /**
  * Cliente de base de datos (libSQL / Turso).
  *
  * - En producción (Vercel): define TURSO_DATABASE_URL y TURSO_AUTH_TOKEN.
+ *   Como es una URL remota (libsql://), usamos el cliente "web" (solo HTTP, sin
+ *   binarios nativos) que es el que funciona en serverless.
  * - En local/desarrollo: si no hay TURSO_DATABASE_URL, usa un archivo SQLite
- *   local (file:polla.db), así puedes trabajar sin Turso.
+ *   local (file:polla.db) con el cliente normal (con soporte nativo).
  */
 const url = process.env.TURSO_DATABASE_URL ?? "file:polla.db";
 const authToken = process.env.TURSO_AUTH_TOKEN;
+
+const { createClient } = url.startsWith("file:")
+  ? await import("@libsql/client")
+  : await import("@libsql/client/web");
 
 export const db: Client = createClient({ url, authToken, intMode: "number" });
 
