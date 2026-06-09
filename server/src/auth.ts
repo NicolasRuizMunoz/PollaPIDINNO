@@ -40,7 +40,7 @@ async function getOrCreateUser(emailRaw: string): Promise<User> {
   const isAdmin =
     (countRow?.c ?? 0) === 0 || ADMIN_EMAILS.includes(email) ? 1 : 0;
   const res = await dbRun(
-    "INSERT INTO users (email, apodo, is_admin) VALUES (?, '', ?)",
+    "INSERT INTO users (email, apodo, is_admin, is_active) VALUES (?, '', ?, 0)",
     [email, isAdmin]
   );
   return {
