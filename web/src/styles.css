@@ -208,6 +208,11 @@ table.leaderboard .total { font-weight: 800; color: var(--red); }
 table.leaderboard .rank { font-size: 1.05rem; }
 table.leaderboard tr.me { background: #fff6f7; }
 
+.users-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.users-toolbar input, .users-toolbar select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 0.85rem; background: var(--card); color: var(--ink); }
+.users-toolbar input { flex: 1; min-width: 150px; }
+.users-toolbar .count { color: var(--muted); font-size: 0.82rem; margin-left: auto; white-space: nowrap; }
+
 /* ---------- standings ---------- */
 .groups-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .group-card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); padding: 12px; }

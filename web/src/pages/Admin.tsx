@@ -356,6 +356,9 @@ function AdminUsers() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"todos" | "activos" | "inactivos">("todos");
+  const [sort, setSort] = useState<"activos" | "inactivos" | "nombre" | "recientes">("activos");
 
   function reload() {
     api.adminUsers().then(setUsers).catch((e: Error) => setError(e.message));
@@ -392,6 +395,25 @@ function AdminUsers() {
     }
   }
 
+  const visible = useMemo(() => {
+    if (!users) return [];
+    const q = query.trim().toLowerCase();
+    const name = (u: AdminUser) => (u.apodo || u.email).toLowerCase();
+    return users
+      .filter((u) => {
+        if (filter === "activos" && !u.is_active) return false;
+        if (filter === "inactivos" && u.is_active) return false;
+        if (q && !`${u.apodo} ${u.email}`.toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (sort === "nombre") return name(a).localeCompare(name(b));
+        if (sort === "recientes") return b.created_at.localeCompare(a.created_at);
+        const dir = sort === "inactivos" ? a.is_active - b.is_active : b.is_active - a.is_active;
+        return dir || name(a).localeCompare(name(b));
+      });
+  }, [users, query, filter, sort]);
+
   if (error) return <p className="err center">{error}</p>;
   if (!users) return <p className="muted center">cargando...</p>;
 
@@ -406,6 +428,28 @@ function AdminUsers() {
           {downloading ? "Descargando…" : "⬇ Descargar backup"}
         </button>
       </div>
+
+      <div className="users-toolbar">
+        <input
+          type="search"
+          placeholder="Buscar por apodo o email…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+          <option value="todos">Todos</option>
+          <option value="activos">Solo activos</option>
+          <option value="inactivos">Solo inactivos</option>
+        </select>
+        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+          <option value="activos">Activos arriba</option>
+          <option value="inactivos">Inactivos arriba</option>
+          <option value="nombre">Nombre (A-Z)</option>
+          <option value="recientes">Más recientes</option>
+        </select>
+        <span className="count">{visible.length} de {users.length}</span>
+      </div>
+
       <table className="leaderboard">
         <thead>
           <tr>
@@ -416,7 +460,14 @@ function AdminUsers() {
           </tr>
         </thead>
         <tbody>
-          {users.map((u) => (
+          {visible.length === 0 && (
+            <tr>
+              <td colSpan={4} className="muted" style={{ textAlign: "center", padding: 16 }}>
+                Sin usuarios que coincidan.
+              </td>
+            </tr>
+          )}
+          {visible.map((u) => (
             <tr key={u.id} style={{ opacity: u.is_active ? 1 : 0.5 }}>
               <td>{u.apodo || <span className="muted">{maskEmail(u.email)}</span>}</td>
               <td className="muted small">{u.email}</td>
