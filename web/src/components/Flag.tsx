@@ -45,10 +45,12 @@ export function Flag({
   const [failed, setFailed] = useState(false);
 
   if (iso && !failed) {
+    // flagcdn solo sirve ciertas alturas (h20, h24, h40, h60…). Pedimos siempre
+    // un tamaño valido (h40 / h80 para retina) y lo escalamos con `height`.
     return (
       <img
-        src={`https://flagcdn.com/h${size}/${iso}.png`}
-        srcSet={`https://flagcdn.com/h${size * 2}/${iso}.png 2x`}
+        src={`https://flagcdn.com/h40/${iso}.png`}
+        srcSet={`https://flagcdn.com/h80/${iso}.png 2x`}
         height={size}
         alt=""
         className="flag-img"

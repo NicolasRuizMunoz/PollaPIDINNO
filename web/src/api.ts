@@ -20,6 +20,7 @@ export type Stage = "group" | "r32" | "r16" | "qf" | "sf" | "third" | "final";
 
 export interface Match {
   id: number;
+  code: string | null;
   stage: Stage;
   grp: string | null;
   label: string | null;
@@ -29,6 +30,8 @@ export interface Match {
   away: Team | null;
   homeLabel: string | null;
   awayLabel: string | null;
+  homeSrc: string | null;
+  awaySrc: string | null;
   homeScore: number | null;
   awayScore: number | null;
   finished: boolean;

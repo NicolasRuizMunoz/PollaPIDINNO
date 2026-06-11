@@ -2,6 +2,7 @@
 import { api, type Match, type Team } from "../api";
 import { sideName } from "../util";
 import { TeamSelect } from "../components/TeamSelect";
+import { Flag } from "../components/Flag";
 
 export function Admin() {
   const [sub, setSub] = useState<"resultados" | "torneo" | "usuarios">("resultados");
@@ -185,14 +186,20 @@ function AdminMatchRow({
 
       <div className="admin-match-body">
         {isKnockout ? (
-          <select value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} className="team-select">
-            <option value="">{match.homeLabel ?? "Local"}</option>
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>{t.flag} {t.name}</option>
-            ))}
-          </select>
+          <span className="team-name">
+            {homeTeam && <Flag teamId={homeTeam} size={16} />}
+            <select value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} className="team-select">
+              <option value="">{match.homeLabel ?? "Local"}</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>{t.flag} {t.name}</option>
+              ))}
+            </select>
+          </span>
         ) : (
-          <span className="team-name">{sideName(match.home, match.homeLabel)}</span>
+          <span className="team-name">
+            <Flag teamId={match.home?.id} emoji={match.home?.flag} size={16} />
+            {sideName(match.home, match.homeLabel)}
+          </span>
         )}
 
         <input className="sc" type="number" min={0} value={home} onChange={(e) => setHome(e.target.value)} />
@@ -200,14 +207,20 @@ function AdminMatchRow({
         <input className="sc" type="number" min={0} value={away} onChange={(e) => setAway(e.target.value)} />
 
         {isKnockout ? (
-          <select value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} className="team-select">
-            <option value="">{match.awayLabel ?? "Visita"}</option>
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>{t.flag} {t.name}</option>
-            ))}
-          </select>
+          <span className="team-name">
+            <select value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} className="team-select">
+              <option value="">{match.awayLabel ?? "Visita"}</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>{t.flag} {t.name}</option>
+              ))}
+            </select>
+            {awayTeam && <Flag teamId={awayTeam} size={16} />}
+          </span>
         ) : (
-          <span className="team-name">{sideName(match.away, match.awayLabel)}</span>
+          <span className="team-name">
+            {sideName(match.away, match.awayLabel)}
+            <Flag teamId={match.away?.id} emoji={match.away?.flag} size={16} />
+          </span>
         )}
       </div>
 

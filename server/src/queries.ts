@@ -20,6 +20,7 @@ export interface TeamRow {
 
 interface MatchRow {
   id: number;
+  code: string | null;
   stage: string;
   grp: string | null;
   label: string | null;
@@ -27,6 +28,8 @@ interface MatchRow {
   away_team: string | null;
   home_label: string | null;
   away_label: string | null;
+  home_src: string | null;
+  away_src: string | null;
   kickoff_at: string;
   venue: string | null;
   home_score: number | null;
@@ -74,6 +77,7 @@ export async function areBonosLocked(): Promise<boolean> {
 export function shapeMatch(m: MatchRow, teams: TeamMap) {
   return {
     id: m.id,
+    code: m.code,
     stage: m.stage,
     grp: m.grp,
     label: m.label,
@@ -83,6 +87,8 @@ export function shapeMatch(m: MatchRow, teams: TeamMap) {
     away: team(m.away_team, teams),
     homeLabel: m.home_label,
     awayLabel: m.away_label,
+    homeSrc: m.home_src,
+    awaySrc: m.away_src,
     homeScore: m.home_score,
     awayScore: m.away_score,
     finished: !!m.finished,
