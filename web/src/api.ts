@@ -246,6 +246,11 @@ export const api = {
       body: JSON.stringify({ active }),
     }),
 
+  adminDeleteUser: (id: number) =>
+    req<{ id: number; deleted: boolean }>(`/admin/users/${id}`, {
+      method: "DELETE",
+    }),
+
   adminBackup: async (): Promise<Blob> => {
     const token = getToken();
     const res = await fetch("/api/admin/backup", {

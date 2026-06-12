@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { api, type Match, type Team } from "../api";
+import { api, getUser, type Match, type Team } from "../api";
 import { sideName } from "../util";
 import { TeamSelect } from "../components/TeamSelect";
 import { Flag } from "../components/Flag";
@@ -359,6 +359,8 @@ function AdminUsers() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"todos" | "activos" | "inactivos">("todos");
   const [sort, setSort] = useState<"activos" | "inactivos" | "nombre" | "recientes">("activos");
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const me = getUser();
 
   function reload() {
     api.adminUsers().then(setUsers).catch((e: Error) => setError(e.message));
@@ -387,6 +389,19 @@ function AdminUsers() {
     setBusy(u.id);
     try {
       await api.adminSetUserActive(u.id, u.is_active === 0);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeUser(u: AdminUser) {
+    setBusy(u.id);
+    try {
+      await api.adminDeleteUser(u.id);
+      setConfirmId(null);
       reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
@@ -480,13 +495,42 @@ function AdminUsers() {
                 {!!u.is_admin && <span className="tag" style={{ marginLeft: 4 }}>admin</span>}
               </td>
               <td>
-                <button
-                  className={`btn${u.is_active ? "" : " primary"}`}
-                  disabled={busy === u.id}
-                  onClick={() => toggleActive(u)}
-                >
-                  {u.is_active ? "Desactivar" : "Activar"}
-                </button>
+                <div className="user-actions">
+                  <button
+                    className={`btn${u.is_active ? "" : " primary"}`}
+                    disabled={busy === u.id}
+                    onClick={() => toggleActive(u)}
+                  >
+                    {u.is_active ? "Desactivar" : "Activar"}
+                  </button>
+                  {me?.id !== u.id &&
+                    (confirmId === u.id ? (
+                      <>
+                        <button
+                          className="btn danger"
+                          disabled={busy === u.id}
+                          onClick={() => removeUser(u)}
+                        >
+                          {busy === u.id ? "Eliminando…" : "Confirmar"}
+                        </button>
+                        <button
+                          className="btn"
+                          disabled={busy === u.id}
+                          onClick={() => setConfirmId(null)}
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="btn danger"
+                        disabled={busy === u.id}
+                        onClick={() => setConfirmId(u.id)}
+                      >
+                        Eliminar
+                      </button>
+                    ))}
+                </div>
               </td>
             </tr>
           ))}

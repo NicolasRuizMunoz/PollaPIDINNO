@@ -179,10 +179,12 @@ app.get(
     }>("SELECT id, home_score, away_score, finished FROM matches WHERE id = ?", [matchId]);
     if (!match) throw new HttpError(404, "Partido no existe");
 
+    // Solo usuarios activos: los inactivos no cuentan ni aparecen en la polla
+    // (igual que en la tabla de posiciones).
     const rows = await dbAll<{ apodo: string; email: string; home_score: number; away_score: number }>(
       `SELECT u.apodo, u.email, p.home_score, p.away_score
        FROM predictions p JOIN users u ON u.id = p.user_id
-       WHERE p.match_id = ? ORDER BY u.apodo`,
+       WHERE p.match_id = ? AND u.is_active = 1 ORDER BY u.apodo`,
       [matchId]
     );
 
@@ -390,6 +392,27 @@ app.put(
     if (typeof active !== "boolean") throw new HttpError(400, "Falta el campo active");
     await dbRun("UPDATE users SET is_active = ? WHERE id = ?", [active ? 1 : 0, id]);
     ok(res, { id, active });
+  })
+);
+
+app.delete(
+  "/api/admin/users/:id",
+  requireAdmin,
+  ah(async (req: AuthedRequest, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) throw new HttpError(400, "Id invalido");
+    if (req.user!.id === id) throw new HttpError(400, "No puedes eliminar tu propia cuenta");
+
+    const user = await dbGet<{ id: number }>("SELECT id FROM users WHERE id = ?", [id]);
+    if (!user) throw new HttpError(404, "Usuario no existe");
+
+    // Borrado explicito de lo asociado (no dependemos de ON DELETE CASCADE,
+    // que no siempre se aplica en libSQL/Turso por conexion).
+    await dbRun("DELETE FROM predictions WHERE user_id = ?", [id]);
+    await dbRun("DELETE FROM tournament_picks WHERE user_id = ?", [id]);
+    await dbRun("DELETE FROM sessions WHERE user_id = ?", [id]);
+    await dbRun("DELETE FROM users WHERE id = ?", [id]);
+    ok(res, { id, deleted: true });
   })
 );
 
