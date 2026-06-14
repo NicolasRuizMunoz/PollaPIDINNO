@@ -26,6 +26,7 @@ import {
 } from "./queries.js";
 import { groupStandings, completeGroups, bestThirds, resolveBracket } from "./advancement.js";
 import { scoreMatch } from "./scoring.js";
+import { updateLiveMatches } from "./live.js";
 
 export const app = express();
 app.use(cors());
@@ -223,7 +224,7 @@ app.get(
     if (req.user) {
       mine =
         (await dbGet(
-          "SELECT champion, runner_up, top_scorer, best_goalkeeper FROM tournament_picks WHERE user_id = ?",
+          "SELECT champion, runner_up, top_scorer, best_goalkeeper, best_player, best_young_player FROM tournament_picks WHERE user_id = ?",
           [req.user.id]
         )) ?? null;
     }
@@ -233,6 +234,8 @@ app.get(
           runnerUp: await getSetting("result_runner_up"),
           topScorer: await getSetting("result_top_scorer"),
           bestGoalkeeper: await getSetting("result_best_goalkeeper"),
+          bestPlayer: await getSetting("result_best_player"),
+          bestYoungPlayer: await getSetting("result_best_young_player"),
         }
       : null;
     ok(res, { locked, deadline: await bonosDeadline(), mine, results });
@@ -244,20 +247,50 @@ app.put(
   requireAuth,
   ah(async (req: AuthedRequest, res) => {
     if (await areBonosLocked()) throw new HttpError(403, "Los bonos ya estan cerrados");
-    const { champion, runnerUp, topScorer, bestGoalkeeper } = req.body ?? {};
+    const { champion, runnerUp, topScorer, bestGoalkeeper, bestPlayer, bestYoungPlayer } =
+      req.body ?? {};
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     await dbRun(
-      `INSERT INTO tournament_picks (user_id, champion, runner_up, top_scorer, best_goalkeeper, updated_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'))
+      `INSERT INTO tournament_picks (user_id, champion, runner_up, top_scorer, best_goalkeeper, best_player, best_young_player, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(user_id) DO UPDATE SET
          champion = excluded.champion,
          runner_up = excluded.runner_up,
          top_scorer = excluded.top_scorer,
          best_goalkeeper = excluded.best_goalkeeper,
+         best_player = excluded.best_player,
+         best_young_player = excluded.best_young_player,
          updated_at = datetime('now')`,
-      [req.user!.id, str(champion), str(runnerUp), str(topScorer), str(bestGoalkeeper)]
+      [
+        req.user!.id,
+        str(champion),
+        str(runnerUp),
+        str(topScorer),
+        str(bestGoalkeeper),
+        str(bestPlayer),
+        str(bestYoungPlayer),
+      ]
     );
     ok(res, { saved: true });
+  })
+);
+
+// ---------------------------------------------------------------- en vivo (cron)
+
+// Lo llama un cron externo (cron-job.org, GitHub Actions, etc.) cada ~3 min.
+// Se autentica con ?key=CRON_SECRET (o header x-cron-key), o con sesión admin.
+app.get(
+  "/api/cron/live",
+  ah(async (req: AuthedRequest, res) => {
+    const secret = process.env.CRON_SECRET;
+    const provided =
+      (req.query.key as string | undefined) ??
+      (req.headers["x-cron-key"] as string | undefined);
+    const isAdmin = req.user?.is_admin === 1;
+    if (!isAdmin && (!secret || provided !== secret)) {
+      throw new HttpError(401, "No autorizado");
+    }
+    ok(res, await updateLiveMatches());
   })
 );
 
@@ -352,12 +385,15 @@ app.put(
   "/api/admin/tournament-results",
   requireAdmin,
   ah(async (req, res) => {
-    const { champion, runnerUp, topScorer, bestGoalkeeper } = req.body ?? {};
+    const { champion, runnerUp, topScorer, bestGoalkeeper, bestPlayer, bestYoungPlayer } =
+      req.body ?? {};
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     await setSetting("result_champion", str(champion));
     await setSetting("result_runner_up", str(runnerUp));
     await setSetting("result_top_scorer", str(topScorer));
     await setSetting("result_best_goalkeeper", str(bestGoalkeeper));
+    await setSetting("result_best_player", str(bestPlayer));
+    await setSetting("result_best_young_player", str(bestYoungPlayer));
     ok(res, { saved: true });
   })
 );

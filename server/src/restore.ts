@@ -42,6 +42,8 @@ interface BackupTournamentPick {
   runner_up: string | null;
   top_scorer: string | null;
   best_goalkeeper: string | null;
+  best_player: string | null;
+  best_young_player: string | null;
   updated_at: string;
 }
 
@@ -117,15 +119,26 @@ async function restore(filePath: string) {
   console.log("Restaurando picks de torneo...");
   for (const t of backup.tournamentPicks) {
     await dbRun(
-      `INSERT INTO tournament_picks (user_id, champion, runner_up, top_scorer, best_goalkeeper, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO tournament_picks (user_id, champion, runner_up, top_scorer, best_goalkeeper, best_player, best_young_player, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
-         champion        = excluded.champion,
-         runner_up       = excluded.runner_up,
-         top_scorer      = excluded.top_scorer,
-         best_goalkeeper = excluded.best_goalkeeper,
-         updated_at      = excluded.updated_at`,
-      [t.user_id, t.champion, t.runner_up, t.top_scorer, t.best_goalkeeper, t.updated_at]
+         champion          = excluded.champion,
+         runner_up         = excluded.runner_up,
+         top_scorer        = excluded.top_scorer,
+         best_goalkeeper   = excluded.best_goalkeeper,
+         best_player       = excluded.best_player,
+         best_young_player = excluded.best_young_player,
+         updated_at        = excluded.updated_at`,
+      [
+        t.user_id,
+        t.champion,
+        t.runner_up,
+        t.top_scorer,
+        t.best_goalkeeper,
+        t.best_player ?? null,
+        t.best_young_player ?? null,
+        t.updated_at,
+      ]
     );
   }
   console.log(`  ✓ ${backup.tournamentPicks.length} picks de torneo`);

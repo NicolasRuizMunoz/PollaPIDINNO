@@ -6,9 +6,10 @@ export function useMatches() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    api
+  // `silent` evita el parpadeo de "cargando…" en recargas automáticas (polling)
+  const reload = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    return api
       .matches()
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Error"))

@@ -22,8 +22,8 @@ todos los partidos y los bonos del torneo; gana quien acumule más puntos.
 | …y además la diferencia de goles (3-1 y queda 4-2) | **+1** (→ 4) |
 | Nada | 0 |
 
-**Bonos del torneo** (se eligen antes): **campeón = 15 pts**; subcampeón, goleador y
-mejor arquero = **10 pts** c/u.
+**Bonos del torneo** (se eligen antes): **campeón = 15 pts**; subcampeón, goleador,
+mejor arquero, mejor jugador y mejor jugador joven = **10 pts** c/u.
 
 > Pasa el mouse (o toca) cualquier puntaje para ver el **desglose** de qué regla te dio
 > cuántos puntos.
@@ -105,6 +105,8 @@ npm run seed     # ⚠️ esto crea las tablas y carga los 104 partidos en Turso
    | `TURSO_AUTH_TOKEN` | `eyJ...` |
    | `GOOGLE_CLIENT_ID` | tu client id (si usas Google; si no, omítelo) |
    | `ADMIN_EMAILS` | `nruiz@copec.cl` (admins fijos, separados por coma) |
+   | `CRON_SECRET` | secreto para el cron de resultados en vivo (opcional) |
+   | `LIVE_API_KEY` | API key de api-sports.io para marcadores en vivo (opcional) |
 
 4. **Deploy**. Quedará el frontend y la API (`/api/...`) en el mismo dominio.
 
@@ -118,7 +120,44 @@ Pestaña **Admin** (solo admins):
 
 - **Resultados y fixture**: editar fecha/hora, cargar marcadores y **publicar** (reparte
   puntos y avanza el cuadro). Botón *Recalcular cuadro* para rearmar las llaves.
-- **Bonos y ajustes**: campeón/subcampeón/goleador/mejor arquero reales y cierre de bonos.
+- **Bonos y ajustes**: campeón/subcampeón/goleador/mejor arquero/mejor jugador/mejor jugador
+  joven reales y cierre de bonos.
+
+## Resultados en vivo (provisionales)
+
+Durante los partidos, la app puede mostrar el **marcador en vivo** y un **puntaje
+provisional** (no oficial) que se actualiza solo. Cómo funciona:
+
+1. Un **cron externo** (p. ej. [cron-job.org](https://cron-job.org) o un GitHub Action)
+   llama cada ~3 min a:
+
+   ```
+   GET https://tu-polla.vercel.app/api/cron/live?key=TU_CRON_SECRET
+   ```
+
+2. Ese endpoint consulta una **API deportiva** (API-Football / api-sports.io) **solo si
+   hay partidos en ventana de juego** (para no gastar cuota) y guarda el marcador
+   provisional. No marca el partido como finalizado.
+
+3. El frontend (pestaña **Hoy** y **Tabla**) se autorefresca cada ~45–60 s y muestra el
+   marcador con un indicador **🔴 EN VIVO** y los puntos provisionales. En la tabla, el
+   total incluye el provisional con una marca `🔴 +N`.
+
+4. El **puntaje oficial** sigue dependiendo de que el admin **publique** el resultado. En
+   el panel **Admin → Hoy** aparece el marcador en vivo con un botón *usar N-N ⬇* para
+   cargarlo de un clic.
+
+**Configuración** (variables de entorno del backend):
+
+| Variable | Para qué |
+|---|---|
+| `LIVE_API_KEY` | API key de api-sports.io. Sin esto, el endpoint queda inactivo. |
+| `CRON_SECRET` | Secreto que debe traer el cron en `?key=`. Un admin logueado también puede llamarlo. |
+| `LIVE_LEAGUE_ID` | Id de liga del Mundial en la API (default `1`). |
+| `LIVE_SEASON` | Temporada (default `2026`). |
+
+> Los nombres de equipo se emparejan por **código FIFA** (nuestros IDs son `ARG`, `BRA`…)
+> con respaldo por nombre; verifica el calce la primera vez que haya partidos reales.
 
 ## Datos del Mundial
 

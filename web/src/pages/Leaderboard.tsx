@@ -10,12 +10,29 @@ export function Leaderboard() {
     api.leaderboard().then(setRows).catch((e) => setError(e.message));
   }, []);
 
+  const anyLive = !!rows?.some((r) => r.livePoints !== 0);
+
+  // si hay puntos en vivo, refresca la tabla cada 60s
+  useEffect(() => {
+    if (!anyLive) return;
+    const id = window.setInterval(() => {
+      api.leaderboard().then(setRows).catch(() => {});
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [anyLive]);
+
   if (error) return <p className="err center">{error}</p>;
   if (!rows) return <p className="muted center">cargando tabla…</p>;
 
   return (
     <div>
       <h2>Tabla de posiciones</h2>
+      {anyLive && (
+        <p className="muted small">
+          🔴 Incluye puntos <strong>provisionales</strong> de partidos en curso (se confirman
+          cuando el admin publica el resultado).
+        </p>
+      )}
       {rows.length === 0 ? (
         <p className="muted">Todavía no hay jugadores.</p>
       ) : (
@@ -38,7 +55,17 @@ export function Leaderboard() {
                 <td className="mono">{r.matchPoints}</td>
                 <td className="mono">{r.bonusPoints}</td>
                 <td className="mono">{r.exactCount}</td>
-                <td className="mono total">{r.total}</td>
+                <td className="mono total">
+                  {r.liveTotal}
+                  {r.livePoints !== 0 && (
+                    <span
+                      className="tag tag-live"
+                      title={`Oficial: ${r.total} · provisional en vivo: ${r.livePoints > 0 ? "+" : ""}${r.livePoints}`}
+                    >
+                      🔴 {r.livePoints > 0 ? "+" : ""}{r.livePoints}
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

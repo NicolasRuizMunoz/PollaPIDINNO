@@ -41,6 +41,13 @@ async function main() {
       { champion: "BRA", runnerUp: "FRA", topScorer: null, bestGoalkeeper: null }
     ) === 10
   );
+  check(
+    "bonos: mejor jugador + mejor jugador joven = 20",
+    scoreTournament(
+      { bestPlayer: "Messi", bestYoungPlayer: "Yamal" },
+      { bestPlayer: "messi", bestYoungPlayer: "YAMAL" }
+    ) === 20
+  );
 
   const { seed } = await import("./seed.js");
   await seed();

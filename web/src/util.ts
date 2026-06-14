@@ -65,6 +65,23 @@ export function hasTeams(m: Match): boolean {
   return !!m.home && !!m.away;
 }
 
+/** ¿El partido está transmitiendo marcador en vivo ahora? (provisional) */
+export function isLiveMatch(m: Match): boolean {
+  return (
+    !m.finished &&
+    (m.status === "LIVE" || m.status === "HT") &&
+    m.liveHome !== null &&
+    m.liveAway !== null
+  );
+}
+
+/** Texto del estado en vivo: minuto, ENTRETIEMPO, etc. */
+export function liveLabel(m: Match): string {
+  if (m.status === "HT") return "ENTRETIEMPO";
+  if (m.minute !== null) return `${m.minute}'`;
+  return "EN VIVO";
+}
+
 /**
  * Desglose del puntaje de una prediccion (mismas reglas que el backend):
  * exacto = 5; ganador = 3 (+1 si aciertas la diferencia de goles).

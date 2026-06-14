@@ -35,6 +35,10 @@ interface MatchRow {
   home_score: number | null;
   away_score: number | null;
   finished: number;
+  status: string | null;
+  live_home: number | null;
+  live_away: number | null;
+  minute: number | null;
 }
 
 export type TeamMap = Map<string, TeamRow>;
@@ -93,7 +97,20 @@ export function shapeMatch(m: MatchRow, teams: TeamMap) {
     awayScore: m.away_score,
     finished: !!m.finished,
     locked: isMatchLocked(m.kickoff_at),
+    status: m.status ?? null,
+    liveHome: m.live_home ?? null,
+    liveAway: m.live_away ?? null,
+    minute: m.minute ?? null,
   };
+}
+
+/** ¿El partido está transmitiendo marcador en vivo ahora mismo? */
+export function isLive(m: { status: string | null; live_home: number | null; live_away: number | null }): boolean {
+  return (
+    (m.status === "LIVE" || m.status === "HT") &&
+    m.live_home !== null &&
+    m.live_away !== null
+  );
 }
 
 export async function allMatches(): Promise<MatchRow[]> {
@@ -115,6 +132,8 @@ export interface LeaderRow {
   bonusPoints: number;
   exactCount: number;
   playedPredictions: number;
+  livePoints: number; // puntos provisionales de partidos en curso
+  liveTotal: number; // total + livePoints
 }
 
 /** Calcula la tabla de posiciones completa (solo usuarios activos). */
@@ -128,6 +147,11 @@ export async function leaderboard(): Promise<LeaderRow[]> {
   ).filter((m) => m.home_score !== null && m.away_score !== null);
   const finishedById = new Map(finished.map((m) => [m.id, m]));
 
+  // partidos en vivo (no finalizados): suman puntos PROVISIONALES, aparte
+  const liveById = new Map(
+    (await dbAll<MatchRow>("SELECT * FROM matches WHERE finished = 0")).filter(isLive).map((m) => [m.id, m])
+  );
+
   const preds = await dbAll<PredRow>("SELECT * FROM predictions");
   const predsByUser = new Map<number, PredRow[]>();
   for (const p of preds) {
@@ -140,6 +164,8 @@ export async function leaderboard(): Promise<LeaderRow[]> {
     runnerUp: await getSetting("result_runner_up"),
     topScorer: await getSetting("result_top_scorer"),
     bestGoalkeeper: await getSetting("result_best_goalkeeper"),
+    bestPlayer: await getSetting("result_best_player"),
+    bestYoungPlayer: await getSetting("result_best_young_player"),
   };
   const bonusPicks = await dbAll<{
     user_id: number;
@@ -147,6 +173,8 @@ export async function leaderboard(): Promise<LeaderRow[]> {
     runner_up: string | null;
     top_scorer: string | null;
     best_goalkeeper: string | null;
+    best_player: string | null;
+    best_young_player: string | null;
   }>("SELECT * FROM tournament_picks");
   const bonusByUser = new Map(bonusPicks.map((b) => [b.user_id, b]));
 
@@ -154,16 +182,27 @@ export async function leaderboard(): Promise<LeaderRow[]> {
     let matchPoints = 0;
     let exactCount = 0;
     let playedPredictions = 0;
+    let livePoints = 0;
     for (const p of predsByUser.get(u.id) ?? []) {
       const m = finishedById.get(p.match_id);
-      if (!m || m.home_score === null || m.away_score === null) continue;
-      playedPredictions++;
-      const pts = scoreMatch(
-        { home: p.home_score, away: p.away_score },
-        { home: m.home_score, away: m.away_score }
-      );
-      matchPoints += pts;
-      if (pts === 5) exactCount++;
+      if (m && m.home_score !== null && m.away_score !== null) {
+        playedPredictions++;
+        const pts = scoreMatch(
+          { home: p.home_score, away: p.away_score },
+          { home: m.home_score, away: m.away_score }
+        );
+        matchPoints += pts;
+        if (pts === 5) exactCount++;
+        continue;
+      }
+      // puntaje PROVISIONAL si el partido va en vivo (no cuenta como oficial)
+      const lm = liveById.get(p.match_id);
+      if (lm && lm.live_home !== null && lm.live_away !== null) {
+        livePoints += scoreMatch(
+          { home: p.home_score, away: p.away_score },
+          { home: lm.live_home, away: lm.live_away }
+        );
+      }
     }
 
     const b = bonusByUser.get(u.id);
@@ -174,24 +213,30 @@ export async function leaderboard(): Promise<LeaderRow[]> {
             runnerUp: b.runner_up,
             topScorer: b.top_scorer,
             bestGoalkeeper: b.best_goalkeeper,
+            bestPlayer: b.best_player,
+            bestYoungPlayer: b.best_young_player,
           },
           results
         )
       : 0;
 
+    const total = matchPoints + bonusPoints;
     return {
       userId: u.id,
       apodo: displayName(u.apodo, u.email),
-      total: matchPoints + bonusPoints,
+      total,
       matchPoints,
       bonusPoints,
       exactCount,
       playedPredictions,
+      livePoints,
+      liveTotal: total + livePoints,
     };
   });
 
   rows.sort(
     (a, b) =>
+      b.liveTotal - a.liveTotal ||
       b.total - a.total ||
       b.exactCount - a.exactCount ||
       a.apodo.localeCompare(b.apodo)

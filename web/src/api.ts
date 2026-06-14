@@ -36,6 +36,10 @@ export interface Match {
   awayScore: number | null;
   finished: boolean;
   locked: boolean;
+  status: string | null; // "LIVE" | "HT" | "FT" | "NS" | null
+  liveHome: number | null;
+  liveAway: number | null;
+  minute: number | null;
 }
 
 export interface MatchesResponse {
@@ -51,6 +55,8 @@ export interface LeaderRow {
   bonusPoints: number;
   exactCount: number;
   playedPredictions: number;
+  livePoints: number;
+  liveTotal: number;
 }
 
 export interface StandingRow {
@@ -90,12 +96,16 @@ export interface TournamentInfo {
     runner_up: string | null;
     top_scorer: string | null;
     best_goalkeeper: string | null;
+    best_player: string | null;
+    best_young_player: string | null;
   } | null;
   results: {
     champion: string | null;
     runnerUp: string | null;
     topScorer: string | null;
     bestGoalkeeper: string | null;
+    bestPlayer: string | null;
+    bestYoungPlayer: string | null;
   } | null;
 }
 
@@ -191,6 +201,8 @@ export const api = {
     runnerUp: string | null;
     topScorer: string | null;
     bestGoalkeeper: string | null;
+    bestPlayer: string | null;
+    bestYoungPlayer: string | null;
   }) =>
     req<{ saved: boolean }>("/tournament", {
       method: "PUT",
@@ -223,6 +235,8 @@ export const api = {
     runnerUp: string | null;
     topScorer: string | null;
     bestGoalkeeper: string | null;
+    bestPlayer: string | null;
+    bestYoungPlayer: string | null;
   }) =>
     req<{ saved: boolean }>("/admin/tournament-results", {
       method: "PUT",

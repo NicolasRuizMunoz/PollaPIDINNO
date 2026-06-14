@@ -3,6 +3,8 @@ import { api, type Match, type MatchPredictions } from "../api";
 import {
   formatDateTime,
   hasTeams,
+  isLiveMatch,
+  liveLabel,
   scoreBreakdown,
   sideName,
 } from "../util";
@@ -62,11 +64,18 @@ export function MatchCard({
       ? scoreBreakdown(myPred, { home: match.homeScore, away: match.awayScore })
       : null;
 
+  const live = isLiveMatch(match);
+  const liveBreakdown =
+    live && myPred
+      ? scoreBreakdown(myPred, { home: match.liveHome, away: match.liveAway })
+      : null;
+
   return (
-    <div className={`match ${match.finished ? "finished" : ""}`}>
+    <div className={`match ${match.finished ? "finished" : ""} ${live ? "live" : ""}`}>
       <div className="match-meta">
         <span>{formatDateTime(match.kickoffAt)}</span>
-        {match.locked && !match.finished && <span className="tag">🔒 cerrado</span>}
+        {live && <span className="tag tag-live">🔴 {liveLabel(match)}</span>}
+        {match.locked && !match.finished && !live && <span className="tag">🔒 cerrado</span>}
         {match.finished && <span className="tag tag-done">finalizado</span>}
       </div>
 
@@ -107,6 +116,23 @@ export function MatchCard({
           <Flag teamId={match.away?.id} emoji={match.away?.flag} />
         </div>
       </div>
+
+      {live && (
+        <div className="match-result live">
+          🔴 Va: <strong>{match.liveHome} - {match.liveAway}</strong>{" "}
+          <span className="muted small">({liveLabel(match)})</span>
+          {liveBreakdown !== null &&
+            (myPred ? (
+              <PointsBadge
+                points={liveBreakdown.points}
+                rule={`Provisional — ${liveBreakdown.rule}`}
+                label={`${liveBreakdown.points} pts (provisional)`}
+              />
+            ) : (
+              <span className="pts zero">no jugaste</span>
+            ))}
+        </div>
+      )}
 
       {match.finished && (
         <div className="match-result">

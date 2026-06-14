@@ -1,15 +1,18 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { api, getUser, type Match, type Team } from "../api";
-import { sideName } from "../util";
+import { sideName, isToday, dayKey, formatDate, isLiveMatch, liveLabel } from "../util";
 import { TeamSelect } from "../components/TeamSelect";
 import { Flag } from "../components/Flag";
 
 export function Admin() {
-  const [sub, setSub] = useState<"resultados" | "torneo" | "usuarios">("resultados");
+  const [sub, setSub] = useState<"hoy" | "resultados" | "torneo" | "usuarios">("hoy");
   return (
     <div>
       <h2>Administración</h2>
       <div className="subnav">
+        <button className={sub === "hoy" ? "active" : ""} onClick={() => setSub("hoy")}>
+          Hoy
+        </button>
         <button className={sub === "resultados" ? "active" : ""} onClick={() => setSub("resultados")}>
           Resultados y fixture
         </button>
@@ -20,9 +23,84 @@ export function Admin() {
           Usuarios
         </button>
       </div>
+      {sub === "hoy" && <AdminHoy />}
       {sub === "resultados" && <AdminResults />}
       {sub === "torneo" && <AdminTournament />}
       {sub === "usuarios" && <AdminUsers />}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------- hoy
+
+function AdminHoy() {
+  const [matches, setMatches] = useState<Match[] | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  function reload() {
+    api.matches().then((d) => setMatches(d.matches)).catch((e) => setError(e.message));
+  }
+  useEffect(() => {
+    reload();
+    api.teams().then(setTeams).catch((e) => setError(e.message));
+  }, []);
+
+  // refresca el marcador en vivo cada 45s mientras haya partidos en curso hoy
+  const shouldPoll = !!matches?.some(
+    (m) => isToday(m.kickoffAt) && !m.finished && (isLiveMatch(m) || m.locked)
+  );
+  useEffect(() => {
+    if (!shouldPoll) return;
+    const id = window.setInterval(reload, 45_000);
+    return () => window.clearInterval(id);
+  }, [shouldPoll]);
+
+  if (error) return <p className="err center">{error}</p>;
+  if (!matches) return <p className="muted center">cargando…</p>;
+
+  const today = matches
+    .filter((m) => isToday(m.kickoffAt))
+    .sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt));
+
+  // el siguiente día de calendario que tenga al menos un partido
+  const todayKey = dayKey(new Date());
+  const nextKey =
+    matches
+      .map((m) => dayKey(m.kickoffAt))
+      .filter((k) => k > todayKey)
+      .sort()[0] ?? null;
+  const nextDay = nextKey
+    ? matches
+        .filter((m) => dayKey(m.kickoffAt) === nextKey)
+        .sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt))
+    : [];
+
+  return (
+    <div>
+      <h3>Partidos de hoy</h3>
+      <p className="muted">{formatDate(new Date().toISOString())}</p>
+
+      {today.length === 0 ? (
+        <p className="muted center">Hoy no hay partidos. 🌙</p>
+      ) : (
+        today.map((m) => (
+          <AdminMatchRow key={m.id} match={m} teams={teams} onChanged={reload} />
+        ))
+      )}
+
+      {nextDay.length > 0 && (
+        <>
+          <hr className="day-sep" />
+          <div className="section-head">
+            <h3>Próximos partidos</h3>
+            <span className="muted">{formatDate(nextDay[0].kickoffAt)}</span>
+          </div>
+          {nextDay.map((m) => (
+            <AdminMatchRow key={m.id} match={m} teams={teams} onChanged={reload} />
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -177,11 +255,27 @@ function AdminMatchRow({
     }
   }
 
+  const live = isLiveMatch(match);
+
   return (
-    <div className={`admin-match ${match.finished ? "finished" : ""}`}>
+    <div className={`admin-match ${match.finished ? "finished" : ""} ${live ? "live" : ""}`}>
       <div className="admin-match-head">
         <span className="muted small">{match.label}</span>
+        {live && <span className="tag tag-live">🔴 {liveLabel(match)}</span>}
         {match.finished && <span className="tag tag-done">publicado</span>}
+        {live && (
+          <button
+            type="button"
+            className="link"
+            title="Copiar el marcador en vivo a los casilleros"
+            onClick={() => {
+              setHome(String(match.liveHome));
+              setAway(String(match.liveAway));
+            }}
+          >
+            usar {match.liveHome}-{match.liveAway} ⬇
+          </button>
+        )}
       </div>
 
       <div className="admin-match-body">
@@ -248,6 +342,8 @@ function AdminTournament() {
   const [runnerUp, setRunnerUp] = useState("");
   const [topScorer, setTopScorer] = useState("");
   const [bestGoalkeeper, setBestGoalkeeper] = useState("");
+  const [bestPlayer, setBestPlayer] = useState("");
+  const [bestYoungPlayer, setBestYoungPlayer] = useState("");
   const [deadline, setDeadline] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -260,6 +356,8 @@ function AdminTournament() {
         setRunnerUp(i.results.runnerUp ?? "");
         setTopScorer(i.results.topScorer ?? "");
         setBestGoalkeeper(i.results.bestGoalkeeper ?? "");
+        setBestPlayer(i.results.bestPlayer ?? "");
+        setBestYoungPlayer(i.results.bestYoungPlayer ?? "");
       }
       if (i.deadline) setDeadline(toLocalInput(i.deadline));
     });
@@ -275,6 +373,8 @@ function AdminTournament() {
         runnerUp: runnerUp || null,
         topScorer: topScorer || null,
         bestGoalkeeper: bestGoalkeeper || null,
+        bestPlayer: bestPlayer || null,
+        bestYoungPlayer: bestYoungPlayer || null,
       });
       setMsg("Resultados de bonos guardados ✓ (los puntos se reparten al instante)");
     } catch (e) {
@@ -297,7 +397,10 @@ function AdminTournament() {
   return (
     <div>
       <h3>Resultados de los bonos</h3>
-      <p className="muted small">Define al campeón, subcampeón, goleador y mejor arquero reales.</p>
+      <p className="muted small">
+        Define al campeón, subcampeón, goleador, mejor arquero, mejor jugador y mejor jugador
+        joven reales.
+      </p>
       <form onSubmit={saveResults} className="bonos">
         <label>
           🏆 Campeón <span className="muted small">(15 pts)</span>
@@ -314,6 +417,14 @@ function AdminTournament() {
         <label>
           🧤 Mejor arquero
           <input type="text" value={bestGoalkeeper} onChange={(e) => setBestGoalkeeper(e.target.value)} />
+        </label>
+        <label>
+          ⭐ Mejor jugador
+          <input type="text" value={bestPlayer} onChange={(e) => setBestPlayer(e.target.value)} />
+        </label>
+        <label>
+          🌟 Mejor jugador joven
+          <input type="text" value={bestYoungPlayer} onChange={(e) => setBestYoungPlayer(e.target.value)} />
         </label>
         <button type="submit" className="btn primary">Guardar resultados</button>
       </form>

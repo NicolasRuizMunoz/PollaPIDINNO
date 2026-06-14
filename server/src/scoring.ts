@@ -11,10 +11,12 @@
  *   - No acertar nada ........................................ 0 pts
  *
  *  Bonos de torneo (predichos antes de empezar):
- *   - Campeón ......... 15
- *   - Subcampeón ...... 10
- *   - Goleador ........ 10
- *   - Mejor arquero ... 10
+ *   - Campeón ............... 15
+ *   - Subcampeón ............ 10
+ *   - Goleador .............. 10
+ *   - Mejor arquero ........ 10
+ *   - Mejor jugador ........ 10
+ *   - Mejor jugador joven .. 10
  */
 
 export const POINTS = {
@@ -75,6 +77,8 @@ export interface TournamentPicks {
   runnerUp?: string | null; // id de equipo
   topScorer?: string | null; // nombre del jugador
   bestGoalkeeper?: string | null; // nombre del jugador
+  bestPlayer?: string | null; // nombre del jugador
+  bestYoungPlayer?: string | null; // nombre del jugador
 }
 
 export interface TournamentResults {
@@ -82,6 +86,8 @@ export interface TournamentResults {
   runnerUp?: string | null;
   topScorer?: string | null;
   bestGoalkeeper?: string | null;
+  bestPlayer?: string | null;
+  bestYoungPlayer?: string | null;
 }
 
 function sameText(a?: string | null, b?: string | null): boolean {
@@ -106,6 +112,12 @@ export function scoreTournament(
     points += POINTS.TOURNAMENT_BONUS;
   }
   if (sameText(picks.bestGoalkeeper, results.bestGoalkeeper)) {
+    points += POINTS.TOURNAMENT_BONUS;
+  }
+  if (sameText(picks.bestPlayer, results.bestPlayer)) {
+    points += POINTS.TOURNAMENT_BONUS;
+  }
+  if (sameText(picks.bestYoungPlayer, results.bestYoungPlayer)) {
     points += POINTS.TOURNAMENT_BONUS;
   }
   return points;

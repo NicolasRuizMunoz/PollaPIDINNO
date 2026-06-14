@@ -73,7 +73,14 @@ export async function initSchema(): Promise<void> {
       venue        TEXT,
       home_score   INTEGER,
       away_score   INTEGER,
-      finished     INTEGER NOT NULL DEFAULT 0
+      finished     INTEGER NOT NULL DEFAULT 0,
+      -- seguimiento en vivo (provisional; no afecta el puntaje oficial)
+      status          TEXT,
+      live_home       INTEGER,
+      live_away       INTEGER,
+      minute          INTEGER,
+      api_fixture_id  INTEGER,
+      live_updated_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS predictions (
@@ -87,12 +94,14 @@ export async function initSchema(): Promise<void> {
     );
 
     CREATE TABLE IF NOT EXISTS tournament_picks (
-      user_id         INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-      champion        TEXT,
-      runner_up       TEXT,
-      top_scorer      TEXT,
-      best_goalkeeper TEXT,
-      updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+      user_id           INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      champion          TEXT,
+      runner_up         TEXT,
+      top_scorer        TEXT,
+      best_goalkeeper   TEXT,
+      best_player       TEXT,
+      best_young_player TEXT,
+      updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -108,13 +117,25 @@ export async function initSchema(): Promise<void> {
   `);
 }
 
-// Migration: add is_active to users table in existing databases
+// Migraciones para bases de datos ya existentes (cada ALTER es idempotente:
+// si la columna ya existe, libSQL lanza error y lo ignoramos).
 async function runMigrations(): Promise<void> {
-  try {
-    await dbRun("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 0");
-  } catch {
-    // Column already exists — safe to ignore
-  }
+  const addColumn = async (sql: string) => {
+    try {
+      await dbRun(sql);
+    } catch {
+      // Column already exists — safe to ignore
+    }
+  };
+  await addColumn("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 0");
+  await addColumn("ALTER TABLE tournament_picks ADD COLUMN best_player TEXT");
+  await addColumn("ALTER TABLE tournament_picks ADD COLUMN best_young_player TEXT");
+  await addColumn("ALTER TABLE matches ADD COLUMN status TEXT");
+  await addColumn("ALTER TABLE matches ADD COLUMN live_home INTEGER");
+  await addColumn("ALTER TABLE matches ADD COLUMN live_away INTEGER");
+  await addColumn("ALTER TABLE matches ADD COLUMN minute INTEGER");
+  await addColumn("ALTER TABLE matches ADD COLUMN api_fixture_id INTEGER");
+  await addColumn("ALTER TABLE matches ADD COLUMN live_updated_at TEXT");
 }
 
 // asegura el esquema una sola vez por proceso (útil en serverless)

@@ -11,6 +11,8 @@ export function Bonos() {
   const [runnerUp, setRunnerUp] = useState("");
   const [topScorer, setTopScorer] = useState("");
   const [bestGoalkeeper, setBestGoalkeeper] = useState("");
+  const [bestPlayer, setBestPlayer] = useState("");
+  const [bestYoungPlayer, setBestYoungPlayer] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,6 +26,8 @@ export function Bonos() {
           setRunnerUp(i.mine.runner_up ?? "");
           setTopScorer(i.mine.top_scorer ?? "");
           setBestGoalkeeper(i.mine.best_goalkeeper ?? "");
+          setBestPlayer(i.mine.best_player ?? "");
+          setBestYoungPlayer(i.mine.best_young_player ?? "");
         }
       })
       .catch((e) => setError(e.message));
@@ -46,6 +50,8 @@ export function Bonos() {
         runnerUp: runnerUp || null,
         topScorer: topScorer || null,
         bestGoalkeeper: bestGoalkeeper || null,
+        bestPlayer: bestPlayer || null,
+        bestYoungPlayer: bestYoungPlayer || null,
       });
       setStatus("Bonos guardados ✓");
     } catch (e) {
@@ -57,8 +63,8 @@ export function Bonos() {
     <div>
       <h2>Bonos del torneo</h2>
       <p className="muted small">
-        Campeón vale <strong>15 puntos</strong>; subcampeón, goleador y mejor arquero,{" "}
-        <strong>10 c/u</strong>.{" "}
+        Campeón vale <strong>15 puntos</strong>; subcampeón, goleador, mejor arquero,
+        mejor jugador y mejor jugador joven, <strong>10 c/u</strong>.{" "}
         {locked ? (
           <span className="err">Cerrados (ya empezó la primera fecha).</span>
         ) : (
@@ -102,6 +108,28 @@ export function Bonos() {
           />
         </label>
 
+        <label>
+          ⭐ Mejor jugador
+          <input
+            type="text"
+            placeholder="Nombre del jugador"
+            value={bestPlayer}
+            disabled={locked}
+            onChange={(e) => setBestPlayer(e.target.value)}
+          />
+        </label>
+
+        <label>
+          🌟 Mejor jugador joven
+          <input
+            type="text"
+            placeholder="Nombre del jugador"
+            value={bestYoungPlayer}
+            disabled={locked}
+            onChange={(e) => setBestYoungPlayer(e.target.value)}
+          />
+        </label>
+
         {!locked && (
           <button type="submit" className="btn primary">Guardar bonos</button>
         )}
@@ -116,6 +144,8 @@ export function Bonos() {
           <ResultRow label="🥈 Subcampeón" value={10} mine={teamName(info.mine?.runner_up ?? null)} real={teamName(info.results.runnerUp)} />
           <ResultRow label="⚽ Goleador" value={10} mine={info.mine?.top_scorer ?? "—"} real={info.results.topScorer ?? "—"} />
           <ResultRow label="🧤 Mejor arquero" value={10} mine={info.mine?.best_goalkeeper ?? "—"} real={info.results.bestGoalkeeper ?? "—"} />
+          <ResultRow label="⭐ Mejor jugador" value={10} mine={info.mine?.best_player ?? "—"} real={info.results.bestPlayer ?? "—"} />
+          <ResultRow label="🌟 Mejor jugador joven" value={10} mine={info.mine?.best_young_player ?? "—"} real={info.results.bestYoungPlayer ?? "—"} />
         </div>
       )}
     </div>

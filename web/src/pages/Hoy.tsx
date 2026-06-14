@@ -1,10 +1,24 @@
+import { useEffect } from "react";
 import { useMatches } from "../useMatches";
 import { MatchCard } from "../components/MatchCard";
-import { isToday, formatDate, dayKey } from "../util";
+import { isToday, formatDate, dayKey, isLiveMatch } from "../util";
 import type { Match } from "../api";
 
 export function Hoy() {
-  const { data, loading, error, onSaved } = useMatches();
+  const { data, loading, error, onSaved, reload } = useMatches();
+
+  // ¿hay algo que valga la pena refrescar? (un partido en vivo, o uno de hoy ya
+  // empezado pero sin resultado oficial → puede pasar a vivo en cualquier momento)
+  const shouldPoll = !!data?.matches.some(
+    (m) => isToday(m.kickoffAt) && !m.finished && (isLiveMatch(m) || m.locked)
+  );
+
+  // refresco automático cada 45s mientras haya partidos en curso hoy
+  useEffect(() => {
+    if (!shouldPoll) return;
+    const id = window.setInterval(() => reload(true), 45_000);
+    return () => window.clearInterval(id);
+  }, [shouldPoll, reload]);
 
   if (loading) return <p className="muted center">cargando partidos…</p>;
   if (error) return <p className="err center">{error}</p>;
