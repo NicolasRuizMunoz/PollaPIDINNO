@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { api, getUser, type DrawRulePreview } from "../api";
 
 /**
@@ -21,14 +21,14 @@ export function ReglaEmpateBanner() {
   const active = data.active;
 
   return (
-    <div className={“regla-banner” + (active ? “ applied” : “”)}>
+    <div className={"regla-banner" + (active ? " applied" : "")}>
       <h3>
         {active
-          ? “✅ Nueva regla del empate: ya aplicada”
-          : “🗳️ La votación ganó: se recalculan los puntos”}
+          ? "✅ Nueva regla del empate: ya aplicada"
+          : "🗳️ La votación ganó: se recalculan los puntos"}
       </h3>
 
-      <div className=”regla-rule”>
+      <div className="regla-rule">
         <strong>Nueva regla del empate:</strong> el bono de +1 se gana solo si tu
         marcador queda a <strong>1 gol</strong> del resultado real.
         <ul>
@@ -40,44 +40,44 @@ export function ReglaEmpateBanner() {
       </div>
 
       {data.affectedCount === 0 ? (
-        <p className=”small muted”>
-          Con los resultados de ahora, a nadie le {active ? “bajó” : “baja”} el
+        <p className="small muted">
+          Con los resultados de ahora, a nadie le {active ? "bajó" : "baja"} el
           puntaje. 🎉
         </p>
       ) : (
         <>
-          <button className=”link regla-toggle” onClick={() => setOpen((v) => !v)}>
+          <button className="link regla-toggle" onClick={() => setOpen((v) => !v)}>
             {open
-              ? “▾ Ocultar detalle”
+              ? "▾ Ocultar detalle"
               : active
-              ? “▸ Ver a quién le bajó”
-              : “▸ Ver a quién le baja”}{“ “}
-            · {data.affectedCount} jugador{data.affectedCount === 1 ? “” : “es”} (−
-            {data.pointsRemoved} pt{data.pointsRemoved === 1 ? “” : “s”} en total)
+              ? "▸ Ver a quién le bajó"
+              : "▸ Ver a quién le baja"}{" "}
+            · {data.affectedCount} jugador{data.affectedCount === 1 ? "" : "es"} (−
+            {data.pointsRemoved} pt{data.pointsRemoved === 1 ? "" : "s"} en total)
           </button>
 
           {open &&
             data.affected.map((u) => (
               <div
                 key={u.userId}
-                className={“regla-user” + (me?.id === u.userId ? “ me” : “”)}
+                className={"regla-user" + (me?.id === u.userId ? " me" : "")}
               >
-                <div className=”regla-user-head”>
+                <div className="regla-user-head">
                   <span>
                     {u.apodo}
-                    {me?.id === u.userId && “ (tú)”}
+                    {me?.id === u.userId && " (tú)"}
                   </span>
-                  <span className=”delta”>
+                  <span className="delta">
                     {u.oldTotal} → {u.newTotal} ({u.delta})
                   </span>
                 </div>
-                <ul className=”regla-changes”>
+                <ul className="regla-changes">
                   {u.changes.map((c) => (
                     <li key={c.matchId}>
                       {c.home} <strong>{c.actualHome}-{c.actualAway}</strong> {c.away}
-                      {“ · “}tu {c.predHome}-{c.predAway}
-                      {“ · “}
-                      <span className=”regla-pts”>{c.oldPts} → {c.newPts}</span> pts
+                      {" · "}tu {c.predHome}-{c.predAway}
+                      {" · "}
+                      <span className="regla-pts">{c.oldPts} → {c.newPts}</span> pts
                     </li>
                   ))}
                 </ul>
