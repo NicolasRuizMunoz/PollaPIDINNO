@@ -2,10 +2,12 @@ import { useEffect } from "react";
 import { useMatches } from "../useMatches";
 import { MatchCard } from "../components/MatchCard";
 import { ReglaEmpateBanner } from "../components/ReglaEmpateBanner";
+import { BonosReabiertosBanner } from "../components/BonosReabiertosBanner";
+
 import { isToday, formatDate, dayKey, isLiveMatch } from "../util";
 import type { Match } from "../api";
 
-export function Hoy() {
+export function Hoy({ onGoToBonos }: { onGoToBonos: () => void }) {
   const { data, loading, error, onSaved, reload } = useMatches();
 
   // ¿hay algo que valga la pena refrescar? (un partido en vivo, o uno de hoy ya
@@ -55,6 +57,7 @@ export function Hoy() {
   return (
     <div>
       <ReglaEmpateBanner />
+      <BonosReabiertosBanner onGoToBonos={onGoToBonos} />
 
       <h2>Partidos de hoy</h2>
       <p className="muted">{formatDate(new Date().toISOString())}</p>

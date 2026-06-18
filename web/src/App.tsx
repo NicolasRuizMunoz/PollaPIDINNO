@@ -116,7 +116,7 @@ export function App() {
       </nav>
 
       <main className="content">
-        {tab === "hoy" && <Hoy />}
+        {tab === "hoy" && <Hoy onGoToBonos={() => setTab("bonos")} />}
         {tab === "partidos" && <Fixture />}
         {tab === "bonos" && <Bonos />}
         {tab === "posiciones" && <Standings />}
