@@ -261,7 +261,11 @@ function AdminMatchRow({
     <div className={`admin-match ${match.finished ? "finished" : ""} ${live ? "live" : ""}`}>
       <div className="admin-match-head">
         <span className="muted small">{match.label}</span>
-        {live && <span className="tag tag-live">🔴 {liveLabel(match)}</span>}
+        {live && (
+          <span className={`tag tag-live ${match.status === "FT" ? "final" : ""}`}>
+            {match.status === "FT" ? "✅" : "🔴"} {liveLabel(match)}
+          </span>
+        )}
         {match.finished && <span className="tag tag-done">publicado</span>}
         {live && (
           <button

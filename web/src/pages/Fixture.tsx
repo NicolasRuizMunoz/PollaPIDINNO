@@ -30,7 +30,13 @@ export function Fixture() {
   if (!data) return null;
 
   const renderMatch = (m: Match) => (
-    <MatchCard key={m.id} match={m} myPred={data.myPredictions[m.id]} onSaved={onSaved} />
+    <MatchCard
+      key={m.id}
+      match={m}
+      myPred={data.myPredictions[m.id]}
+      onSaved={onSaved}
+      drawRuleActive={data.drawRuleActive}
+    />
   );
 
   const groupMatches = (g: string) =>

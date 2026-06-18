@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.build.json",
     "seed": "tsx src/seed.ts",
     "restore": "tsx src/restore.ts",
-    "selftest": "tsx src/selftest.ts"
+    "selftest": "tsx src/selftest.ts",
+    "test:empate": "tsx src/drawrule.test.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",

@@ -17,10 +17,12 @@ export function MatchCard({
   match,
   myPred,
   onSaved,
+  drawRuleActive = false,
 }: {
   match: Match;
   myPred?: { home: number; away: number };
   onSaved?: (matchId: number, home: number, away: number) => void;
+  drawRuleActive?: boolean;
 }) {
   const editable = !match.locked && hasTeams(match);
   const [home, setHome] = useState(myPred ? String(myPred.home) : "");
@@ -61,20 +63,24 @@ export function MatchCard({
 
   const userBreakdown =
     match.finished && myPred
-      ? scoreBreakdown(myPred, { home: match.homeScore, away: match.awayScore })
+      ? scoreBreakdown(myPred, { home: match.homeScore, away: match.awayScore }, drawRuleActive)
       : null;
 
   const live = isLiveMatch(match);
   const liveBreakdown =
     live && myPred
-      ? scoreBreakdown(myPred, { home: match.liveHome, away: match.liveAway })
+      ? scoreBreakdown(myPred, { home: match.liveHome, away: match.liveAway }, drawRuleActive)
       : null;
 
   return (
     <div className={`match ${match.finished ? "finished" : ""} ${live ? "live" : ""}`}>
       <div className="match-meta">
         <span>{formatDateTime(match.kickoffAt)}</span>
-        {live && <span className="tag tag-live">🔴 {liveLabel(match)}</span>}
+        {live && (
+          <span className={`tag tag-live ${match.status === "FT" ? "final" : ""}`}>
+            {match.status === "FT" ? "✅" : "🔴"} {liveLabel(match)}
+          </span>
+        )}
         {match.locked && !match.finished && !live && <span className="tag">🔒 cerrado</span>}
         {match.finished && <span className="tag tag-done">finalizado</span>}
       </div>
@@ -119,7 +125,8 @@ export function MatchCard({
 
       {live && (
         <div className="match-result live">
-          🔴 Va: <strong>{match.liveHome} - {match.liveAway}</strong>{" "}
+          {match.status === "FT" ? "✅ Final (provisional):" : "🔴 Va:"}{" "}
+          <strong>{match.liveHome} - {match.liveAway}</strong>{" "}
           <span className="muted small">({liveLabel(match)})</span>
           {liveBreakdown !== null &&
             (myPred ? (
@@ -162,12 +169,18 @@ export function MatchCard({
         </button>
       </div>
 
-      {showPanel && <ParticipantsPanel matchId={match.id} />}
+      {showPanel && <ParticipantsPanel matchId={match.id} drawRuleActive={drawRuleActive} />}
     </div>
   );
 }
 
-function ParticipantsPanel({ matchId }: { matchId: number }) {
+function ParticipantsPanel({
+  matchId,
+  drawRuleActive = false,
+}: {
+  matchId: number;
+  drawRuleActive?: boolean;
+}) {
   const [data, setData] = useState<MatchPredictions | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -215,7 +228,8 @@ function ParticipantsPanel({ matchId }: { matchId: number }) {
           {data.predictions!.map((p) => {
             const bd = scoreBreakdown(
               { home: p.home, away: p.away },
-              { home: data.match!.homeScore, away: data.match!.awayScore }
+              { home: data.match!.homeScore, away: data.match!.awayScore },
+              drawRuleActive
             );
             return (
               <tr key={p.apodo}>

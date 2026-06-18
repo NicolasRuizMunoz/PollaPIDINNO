@@ -24,7 +24,11 @@ import { dbAll, dbRun } from "./db.js";
 
 /** Ventana en la que un partido se considera "potencialmente en juego". */
 const PRE_MINUTES = 10; // margen antes del kickoff (por desfases de horario)
-const MATCH_MAX_MINUTES = 200; // ~3h20: cubre alargues y tanda de penales
+// Tope de seguridad: solo aplica si NUNCA llegamos a ver el "FT" desde la API
+// (p. ej. si falla el emparejamiento). Lo normal es que la ventana se cierre
+// antes, apenas la API reporta el partido terminado. 160 min cubre alargues +
+// tanda de penales.
+const MATCH_MAX_MINUTES = 160;
 
 /** Normaliza un texto para comparar nombres de equipo (sin acentos, minúsculas). */
 function norm(s: string): string {
@@ -79,6 +83,7 @@ interface MatchRow {
   away_team: string | null;
   api_fixture_id: number | null;
   kickoff_at: string;
+  status: string | null;
 }
 
 interface TeamRow {
@@ -152,9 +157,10 @@ export interface LiveUpdateResult {
 export async function updateLiveMatches(): Promise<LiveUpdateResult> {
   const now = Date.now();
   const all = await dbAll<MatchRow>(
-    "SELECT id, home_team, away_team, api_fixture_id, kickoff_at FROM matches WHERE finished = 0"
+    "SELECT id, home_team, away_team, api_fixture_id, kickoff_at, status FROM matches WHERE finished = 0"
   );
   const inWindow = all.filter((m) => {
+    if (m.status === "FT") return false; // la API ya lo dio por terminado → no consultar más
     const ko = new Date(m.kickoff_at).getTime();
     return now >= ko - PRE_MINUTES * 60_000 && now <= ko + MATCH_MAX_MINUTES * 60_000;
   });

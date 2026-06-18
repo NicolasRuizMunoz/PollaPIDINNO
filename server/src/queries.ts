@@ -1,5 +1,5 @@
 import { dbAll, dbGet, getSetting } from "./db.js";
-import { scoreMatch, scoreTournament } from "./scoring.js";
+import { scoreMatch, scoreMatchDrawV2, scoreTournament } from "./scoring.js";
 
 export function maskEmail(email: string): string {
   const at = email.indexOf("@");
@@ -78,6 +78,34 @@ export async function areBonosLocked(): Promise<boolean> {
   return Date.now() >= new Date(deadline).getTime();
 }
 
+// --- regla del empate: disparador (gating) ---------------------------------
+// La regla NUEVA del empate entra a regir cuando se PUBLICA el partido
+// disparador (Colombia: id 232 = UZB-COL del 17/18-jun). Antes de eso, todo el
+// puntaje usa la regla vieja. Editable con el setting `draw_rule_trigger_match`.
+const DRAW_RULE_TRIGGER_DEFAULT = 232;
+
+export async function drawRuleTriggerMatchId(): Promise<number> {
+  const s = await getSetting("draw_rule_trigger_match");
+  const n = s ? Number(s) : NaN;
+  return Number.isInteger(n) ? n : DRAW_RULE_TRIGGER_DEFAULT;
+}
+
+/** ¿Ya rige la regla nueva del empate? (el partido disparador está publicado) */
+export async function drawRuleActive(): Promise<boolean> {
+  const id = await drawRuleTriggerMatchId();
+  const m = await dbGet<{
+    finished: number;
+    home_score: number | null;
+    away_score: number | null;
+  }>("SELECT finished, home_score, away_score FROM matches WHERE id = ?", [id]);
+  return !!m && m.finished === 1 && m.home_score !== null && m.away_score !== null;
+}
+
+/** El motor de puntaje vigente según si la regla nueva ya está activa. */
+export async function activeScorer() {
+  return (await drawRuleActive()) ? scoreMatchDrawV2 : scoreMatch;
+}
+
 export function shapeMatch(m: MatchRow, teams: TeamMap) {
   return {
     id: m.id,
@@ -104,10 +132,14 @@ export function shapeMatch(m: MatchRow, teams: TeamMap) {
   };
 }
 
-/** ¿El partido está transmitiendo marcador en vivo ahora mismo? */
+/**
+ * ¿El partido tiene un marcador "en vivo" que cuenta como PROVISIONAL?
+ * Incluye FT (terminado según la API) mientras el admin no publique el oficial,
+ * para que el resultado no "desaparezca" en ese intervalo.
+ */
 export function isLive(m: { status: string | null; live_home: number | null; live_away: number | null }): boolean {
   return (
-    (m.status === "LIVE" || m.status === "HT") &&
+    (m.status === "LIVE" || m.status === "HT" || m.status === "FT") &&
     m.live_home !== null &&
     m.live_away !== null
   );
@@ -178,6 +210,9 @@ export async function leaderboard(): Promise<LeaderRow[]> {
   }>("SELECT * FROM tournament_picks");
   const bonusByUser = new Map(bonusPicks.map((b) => [b.user_id, b]));
 
+  // motor de puntaje vigente (regla vieja, o la nueva si ya se publicó Colombia)
+  const score = await activeScorer();
+
   const rows: LeaderRow[] = users.map((u) => {
     let matchPoints = 0;
     let exactCount = 0;
@@ -187,7 +222,7 @@ export async function leaderboard(): Promise<LeaderRow[]> {
       const m = finishedById.get(p.match_id);
       if (m && m.home_score !== null && m.away_score !== null) {
         playedPredictions++;
-        const pts = scoreMatch(
+        const pts = score(
           { home: p.home_score, away: p.away_score },
           { home: m.home_score, away: m.away_score }
         );
@@ -198,7 +233,7 @@ export async function leaderboard(): Promise<LeaderRow[]> {
       // puntaje PROVISIONAL si el partido va en vivo (no cuenta como oficial)
       const lm = liveById.get(p.match_id);
       if (lm && lm.live_home !== null && lm.live_away !== null) {
-        livePoints += scoreMatch(
+        livePoints += score(
           { home: p.home_score, away: p.away_score },
           { home: lm.live_home, away: lm.live_away }
         );
@@ -242,4 +277,185 @@ export async function leaderboard(): Promise<LeaderRow[]> {
       a.apodo.localeCompare(b.apodo)
   );
   return rows;
+}
+
+// ----------------------------------------------------------------------------
+// Vista previa del cambio de regla del EMPATE (propuesta, aún NO aplicada).
+// Compara el puntaje actual (scoreMatch) con el de la regla nueva
+// (scoreMatchDrawV2) para mostrar quién bajaría y en qué partidos.
+// No modifica ningún dato ni el puntaje oficial.
+// ----------------------------------------------------------------------------
+
+export interface DrawRuleChange {
+  matchId: number;
+  stage: string;
+  kickoffAt: string;
+  home: string;
+  away: string;
+  predHome: number;
+  predAway: number;
+  actualHome: number;
+  actualAway: number;
+  oldPts: number;
+  newPts: number;
+}
+
+export interface DrawRuleUser {
+  userId: number;
+  apodo: string;
+  oldTotal: number;
+  newTotal: number;
+  delta: number; // newTotal - oldTotal (negativo)
+  changes: DrawRuleChange[];
+}
+
+export interface DrawRuleTrigger {
+  matchId: number;
+  home: string;
+  away: string;
+  kickoffAt: string;
+  published: boolean; // ¿ya tiene resultado publicado?
+}
+
+export interface DrawRulePreview {
+  active: boolean; // ¿la regla nueva ya rige? (Colombia publicado)
+  trigger: DrawRuleTrigger | null; // partido que dispara el cambio
+  affected: DrawRuleUser[];
+  affectedCount: number;
+  pointsRemoved: number; // total de puntos que se quitarían entre todos
+}
+
+export async function drawRulePreview(): Promise<DrawRulePreview> {
+  const users = await dbAll<{ id: number; apodo: string; email: string }>(
+    "SELECT id, apodo, email FROM users WHERE is_active = 1 ORDER BY id"
+  );
+
+  const teams = await loadTeamMap();
+  const finished = (
+    await dbAll<MatchRow>("SELECT * FROM matches WHERE finished = 1")
+  ).filter((m) => m.home_score !== null && m.away_score !== null);
+  const finishedById = new Map(finished.map((m) => [m.id, m]));
+
+  const preds = await dbAll<PredRow>("SELECT * FROM predictions");
+  const predsByUser = new Map<number, PredRow[]>();
+  for (const p of preds) {
+    if (!predsByUser.has(p.user_id)) predsByUser.set(p.user_id, []);
+    predsByUser.get(p.user_id)!.push(p);
+  }
+
+  // Bonos de torneo: son iguales con cualquiera de las dos reglas, pero los
+  // sumamos para que oldTotal/newTotal coincidan con la tabla de posiciones.
+  const results = {
+    champion: await getSetting("result_champion"),
+    runnerUp: await getSetting("result_runner_up"),
+    topScorer: await getSetting("result_top_scorer"),
+    bestGoalkeeper: await getSetting("result_best_goalkeeper"),
+    bestPlayer: await getSetting("result_best_player"),
+    bestYoungPlayer: await getSetting("result_best_young_player"),
+  };
+  const bonusPicks = await dbAll<{
+    user_id: number;
+    champion: string | null;
+    runner_up: string | null;
+    top_scorer: string | null;
+    best_goalkeeper: string | null;
+    best_player: string | null;
+    best_young_player: string | null;
+  }>("SELECT * FROM tournament_picks");
+  const bonusByUser = new Map(bonusPicks.map((b) => [b.user_id, b]));
+  const bonusFor = (userId: number): number => {
+    const b = bonusByUser.get(userId);
+    return b
+      ? scoreTournament(
+          {
+            champion: b.champion,
+            runnerUp: b.runner_up,
+            topScorer: b.top_scorer,
+            bestGoalkeeper: b.best_goalkeeper,
+            bestPlayer: b.best_player,
+            bestYoungPlayer: b.best_young_player,
+          },
+          results
+        )
+      : 0;
+  };
+
+  const sideName = (id: string | null, label: string | null): string =>
+    (id ? teams.get(id)?.name : null) ?? label ?? id ?? "Por definir";
+
+  const affected: DrawRuleUser[] = [];
+  let pointsRemoved = 0;
+
+  for (const u of users) {
+    const changes: DrawRuleChange[] = [];
+    let oldMatch = 0;
+    let newMatch = 0;
+
+    for (const p of predsByUser.get(u.id) ?? []) {
+      const m = finishedById.get(p.match_id);
+      if (!m || m.home_score === null || m.away_score === null) continue;
+      const pred = { home: p.home_score, away: p.away_score };
+      const actual = { home: m.home_score, away: m.away_score };
+      const oldPts = scoreMatch(pred, actual);
+      const newPts = scoreMatchDrawV2(pred, actual);
+      oldMatch += oldPts;
+      newMatch += newPts;
+      if (newPts !== oldPts) {
+        changes.push({
+          matchId: m.id,
+          stage: m.stage,
+          kickoffAt: m.kickoff_at,
+          home: sideName(m.home_team, m.home_label),
+          away: sideName(m.away_team, m.away_label),
+          predHome: p.home_score,
+          predAway: p.away_score,
+          actualHome: m.home_score,
+          actualAway: m.away_score,
+          oldPts,
+          newPts,
+        });
+      }
+    }
+
+    const delta = newMatch - oldMatch;
+    if (delta < 0) {
+      const bonus = bonusFor(u.id);
+      changes.sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt));
+      affected.push({
+        userId: u.id,
+        apodo: displayName(u.apodo, u.email),
+        oldTotal: oldMatch + bonus,
+        newTotal: newMatch + bonus,
+        delta,
+        changes,
+      });
+      pointsRemoved += -delta;
+    }
+  }
+
+  affected.sort(
+    (a, b) => a.delta - b.delta || a.apodo.localeCompare(b.apodo)
+  );
+
+  // partido disparador (Colombia) y si la regla ya rige
+  const triggerId = await drawRuleTriggerMatchId();
+  const tm = finishedById.get(triggerId) ??
+    (await dbGet<MatchRow>("SELECT * FROM matches WHERE id = ?", [triggerId]));
+  const trigger: DrawRuleTrigger | null = tm
+    ? {
+        matchId: tm.id,
+        home: sideName(tm.home_team, tm.home_label),
+        away: sideName(tm.away_team, tm.away_label),
+        kickoffAt: tm.kickoff_at,
+        published: tm.finished === 1 && tm.home_score !== null && tm.away_score !== null,
+      }
+    : null;
+
+  return {
+    active: trigger?.published ?? false,
+    trigger,
+    affected,
+    affectedCount: affected.length,
+    pointsRemoved,
+  };
 }

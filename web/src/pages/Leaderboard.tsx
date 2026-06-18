@@ -29,8 +29,8 @@ export function Leaderboard() {
       <h2>Tabla de posiciones</h2>
       {anyLive && (
         <p className="muted small">
-          🔴 Incluye puntos <strong>provisionales</strong> de partidos en curso (se confirman
-          cuando el admin publica el resultado).
+          🔴 Incluye puntos <strong>provisionales</strong> de partidos en curso o aún sin
+          confirmar (se vuelven oficiales cuando el admin publica el resultado).
         </p>
       )}
       {rows.length === 0 ? (

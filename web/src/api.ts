@@ -45,6 +45,7 @@ export interface Match {
 export interface MatchesResponse {
   matches: Match[];
   myPredictions: Record<number, { home: number; away: number }>;
+  drawRuleActive: boolean; // ¿ya rige la regla nueva del empate?
 }
 
 export interface LeaderRow {
@@ -86,6 +87,46 @@ export interface MatchPredictions {
   confirmed?: { apodo: string }[];
   match?: { homeScore: number; awayScore: number; finished: boolean };
   predictions?: { apodo: string; home: number; away: number; points: number }[];
+}
+
+// Vista previa del cambio de regla del empate (propuesta, aún NO aplicada).
+export interface DrawRuleChange {
+  matchId: number;
+  stage: Stage;
+  kickoffAt: string;
+  home: string;
+  away: string;
+  predHome: number;
+  predAway: number;
+  actualHome: number;
+  actualAway: number;
+  oldPts: number;
+  newPts: number;
+}
+
+export interface DrawRuleUser {
+  userId: number;
+  apodo: string;
+  oldTotal: number;
+  newTotal: number;
+  delta: number;
+  changes: DrawRuleChange[];
+}
+
+export interface DrawRuleTrigger {
+  matchId: number;
+  home: string;
+  away: string;
+  kickoffAt: string;
+  published: boolean;
+}
+
+export interface DrawRulePreview {
+  active: boolean;
+  trigger: DrawRuleTrigger | null;
+  affected: DrawRuleUser[];
+  affectedCount: number;
+  pointsRemoved: number;
 }
 
 export interface TournamentInfo {
@@ -191,6 +232,8 @@ export const api = {
     req<MatchPredictions>(`/matches/${matchId}/predictions`),
 
   leaderboard: () => req<LeaderRow[]>("/leaderboard"),
+
+  reglaEmpate: () => req<DrawRulePreview>("/regla-empate"),
 
   standings: () => req<StandingsResponse>("/standings"),
 

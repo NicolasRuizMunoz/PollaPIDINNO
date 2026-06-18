@@ -22,10 +22,12 @@ import {
   areBonosLocked,
   bonosDeadline,
   leaderboard,
+  drawRulePreview,
+  drawRuleActive,
+  activeScorer,
   displayName,
 } from "./queries.js";
 import { groupStandings, completeGroups, bestThirds, resolveBracket } from "./advancement.js";
-import { scoreMatch } from "./scoring.js";
 import { updateLiveMatches } from "./live.js";
 
 export const app = express();
@@ -129,7 +131,7 @@ app.get(
       );
       for (const r of rows) myPreds[r.match_id] = { home: r.home_score, away: r.away_score };
     }
-    ok(res, { matches, myPredictions: myPreds });
+    ok(res, { matches, myPredictions: myPreds, drawRuleActive: await drawRuleActive() });
   })
 );
 
@@ -196,12 +198,13 @@ app.get(
     }
 
     const actual = { home: match.home_score!, away: match.away_score! };
+    const score = await activeScorer();
     const predictions = rows
       .map((r) => ({
         apodo: displayName(r.apodo, r.email),
         home: r.home_score,
         away: r.away_score,
-        points: scoreMatch({ home: r.home_score, away: r.away_score }, actual),
+        points: score({ home: r.home_score, away: r.away_score }, actual),
       }))
       .sort((a, b) => b.points - a.points || a.apodo.localeCompare(b.apodo));
 
@@ -300,6 +303,15 @@ app.get(
   "/api/leaderboard",
   ah(async (_req, res) => {
     ok(res, await leaderboard());
+  })
+);
+
+// Vista previa del cambio de regla del empate (propuesta, aún NO aplicada).
+// Solo calcula y muestra el impacto; no toca el puntaje oficial.
+app.get(
+  "/api/regla-empate",
+  ah(async (_req, res) => {
+    ok(res, await drawRulePreview());
   })
 );
 

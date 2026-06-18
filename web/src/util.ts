@@ -65,19 +65,25 @@ export function hasTeams(m: Match): boolean {
   return !!m.home && !!m.away;
 }
 
-/** ¿El partido está transmitiendo marcador en vivo ahora? (provisional) */
+/** ¿El partido tiene marcador provisional? (en juego o terminado sin publicar) */
 export function isLiveMatch(m: Match): boolean {
   return (
     !m.finished &&
-    (m.status === "LIVE" || m.status === "HT") &&
+    (m.status === "LIVE" || m.status === "HT" || m.status === "FT") &&
     m.liveHome !== null &&
     m.liveAway !== null
   );
 }
 
-/** Texto del estado en vivo: minuto, ENTRETIEMPO, etc. */
+/** ¿Está en juego ahora mismo? (FT = terminado, ya no se mueve) */
+export function isInPlay(m: Match): boolean {
+  return isLiveMatch(m) && m.status !== "FT";
+}
+
+/** Texto del estado en vivo: minuto, ENTRETIEMPO, FINAL, etc. */
 export function liveLabel(m: Match): string {
   if (m.status === "HT") return "ENTRETIEMPO";
+  if (m.status === "FT") return "FINAL · por confirmar";
   if (m.minute !== null) return `${m.minute}'`;
   return "EN VIVO";
 }
@@ -94,7 +100,8 @@ export interface Breakdown {
 
 export function scoreBreakdown(
   pred: { home: number; away: number } | null,
-  actual: { home: number | null; away: number | null }
+  actual: { home: number | null; away: number | null },
+  drawRuleV2 = false
 ): Breakdown {
   if (!pred) return { points: 0, rule: "No jugaste este partido" };
   if (actual.home === null || actual.away === null)
@@ -105,9 +112,16 @@ export function scoreBreakdown(
 
   const sign = (h: number, a: number) => Math.sign(h - a);
   if (sign(pred.home, pred.away) === sign(actual.home, actual.away)) {
+    const isDraw = sign(actual.home, actual.away) === 0;
+    // Regla NUEVA del empate: el +1 se gana solo si quedas a 1 gol del real.
+    if (drawRuleV2 && isDraw) {
+      if (Math.abs(pred.home - actual.home) === 1)
+        return { points: 4, rule: "Empate → +3 · a 1 gol del marcador → +1 (total 4)" };
+      return { points: 3, rule: "Empate acertado → +3" };
+    }
     if (pred.home - pred.away === actual.home - actual.away)
       return { points: 4, rule: "Ganador → +3 · Diferencia de goles → +1 (total 4)" };
-    return { points: 3, rule: "Ganador acertado → +3" };
+    return { points: 3, rule: isDraw ? "Empate acertado → +3" : "Ganador acertado → +3" };
   }
   return { points: 0, rule: "Sin aciertos → 0" };
 }
@@ -115,7 +129,8 @@ export function scoreBreakdown(
 /** Solo el numero de puntos. */
 export function scorePrediction(
   pred: { home: number; away: number } | null,
-  actual: { home: number | null; away: number | null }
+  actual: { home: number | null; away: number | null },
+  drawRuleV2 = false
 ): number {
-  return scoreBreakdown(pred, actual).points;
+  return scoreBreakdown(pred, actual, drawRuleV2).points;
 }

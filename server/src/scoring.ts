@@ -72,6 +72,54 @@ export function scoreMatch(pred: Score | null, actual: Score | null): number {
   return points;
 }
 
+/**
+ * Puntaje con la NUEVA regla de empate (PROPUESTA — todavía NO vigente).
+ *
+ * Se usa solo para calcular el impacto del cambio (tablero "Hoy"). NO cambia el
+ * puntaje real: ese sigue saliendo de `scoreMatch`.
+ *
+ * Única diferencia con `scoreMatch`: el bono de +1 en los EMPATES.
+ *  - Regla vieja: cualquier empate acierta "la diferencia de goles" (siempre 0),
+ *    así que predecir un empate daba 3 + 1 = 4 pts gratis.
+ *  - Regla nueva: en los empates el +1 se gana solo si tu marcador queda a
+ *    exactamente 1 gol del real (p.ej. 1-1 y queda 2-2 → sí; 0-0 y queda 2-2 → no).
+ *  - Con ganador definido, nada cambia: el +1 sigue siendo por diferencia de goles.
+ */
+export function scoreMatchDrawV2(pred: Score | null, actual: Score | null): number {
+  if (!pred || !actual) return 0;
+  if (
+    !Number.isFinite(pred.home) ||
+    !Number.isFinite(pred.away) ||
+    !Number.isFinite(actual.home) ||
+    !Number.isFinite(actual.away)
+  ) {
+    return 0;
+  }
+
+  // Marcador exacto
+  if (pred.home === actual.home && pred.away === actual.away) {
+    return POINTS.EXACT;
+  }
+
+  let points = 0;
+
+  if (outcome(pred) === outcome(actual)) {
+    points += POINTS.OUTCOME;
+
+    if (outcome(actual) === 0) {
+      // Empate: bono solo si quedaste a 1 gol del marcador real (1-1 vs 2-2).
+      if (Math.abs(pred.home - actual.home) === 1) {
+        points += POINTS.GOAL_DIFF_BONUS;
+      }
+    } else if (pred.home - pred.away === actual.home - actual.away) {
+      // Con ganador: +1 por acertar la diferencia de goles (igual que antes).
+      points += POINTS.GOAL_DIFF_BONUS;
+    }
+  }
+
+  return points;
+}
+
 export interface TournamentPicks {
   champion?: string | null; // id de equipo
   runnerUp?: string | null; // id de equipo

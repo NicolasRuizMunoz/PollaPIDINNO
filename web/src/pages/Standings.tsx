@@ -217,7 +217,7 @@ function BracketSide({
   return (
     <div className={`bk-side ${win ? "win" : ""} ${team ? "" : "tbd"}`} title={team?.name ?? undefined}>
       <Flag teamId={team?.id} emoji={team?.flag} size={16} />
-      <span className="bk-name">{team ? team.id : shortSrc(src)}</span>
+      <span className="bk-name">{team ? team.name : shortSrc(src)}</span>
       <span className="bk-score">{score ?? ""}</span>
     </div>
   );
