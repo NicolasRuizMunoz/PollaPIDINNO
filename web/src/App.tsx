@@ -13,10 +13,11 @@ import { Hoy } from "./pages/Hoy";
 import { Fixture } from "./pages/Fixture";
 import { Standings } from "./pages/Standings";
 import { Leaderboard } from "./pages/Leaderboard";
+import { MisPartidos } from "./pages/MisPartidos";
 import { Bonos } from "./pages/Bonos";
 import { Admin } from "./pages/Admin";
 
-type Tab = "hoy" | "partidos" | "bonos" | "posiciones" | "tabla" | "admin";
+type Tab = "hoy" | "partidos" | "bonos" | "posiciones" | "tabla" | "mis" | "admin";
 
 const TABS: { id: Tab; label: string; adminOnly?: boolean }[] = [
   { id: "hoy", label: "Hoy" },
@@ -24,6 +25,7 @@ const TABS: { id: Tab; label: string; adminOnly?: boolean }[] = [
   { id: "bonos", label: "Bonos" },
   { id: "posiciones", label: "Posiciones" },
   { id: "tabla", label: "Tabla" },
+  { id: "mis", label: "Mis partidos" },
   { id: "admin", label: "Admin", adminOnly: true },
 ];
 
@@ -121,6 +123,7 @@ export function App() {
         {tab === "bonos" && <Bonos />}
         {tab === "posiciones" && <Standings />}
         {tab === "tabla" && <Leaderboard />}
+        {tab === "mis" && <MisPartidos />}
         {tab === "admin" && user.isAdmin && <Admin />}
       </main>
 

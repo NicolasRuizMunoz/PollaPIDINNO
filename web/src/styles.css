@@ -279,35 +279,26 @@ table.standings tr.qual .pos { color: var(--green); font-weight: 700; }
 .kickoff { display: flex; align-items: center; gap: 4px; font-size: 0.8rem; }
 .kickoff input { padding: 5px; border: 1px solid var(--line); border-radius: 6px; }
 
-/* ---------- aviso cambio de regla del empate ---------- */
-.regla-banner {
-  background: var(--card); border-radius: 12px; box-shadow: var(--shadow);
-  border-left: 3px solid var(--red); padding: 14px 16px; margin-bottom: 16px;
+/* ---------- mis partidos (historial del usuario) ---------- */
+.hist-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 14px; }
+.hist-filters input, .hist-filters select {
+  padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 0.85rem; background: var(--card); color: var(--ink);
 }
-.regla-banner.applied { border-left-color: var(--green); }
-.regla-banner h3 { margin: 0 0 6px; font-size: 1.05rem; }
-.regla-banner p { margin: 6px 0; }
-.regla-rule {
-  background: #fafbfc; border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 12px; margin: 10px 0; font-size: 0.88rem;
-}
-.regla-rule ul { margin: 6px 0; padding-left: 20px; }
-.regla-rule li { margin: 2px 0; }
-.regla-apply {
-  background: var(--green-bg); color: var(--ink); border-radius: 8px;
-  padding: 8px 10px; font-size: 0.85rem;
-}
-.regla-toggle { display: inline-block; margin: 6px 0 2px; font-weight: 600; }
-.regla-user { border-top: 1px solid var(--line); padding: 8px 2px; }
-.regla-user.me { background: #fff6f7; border-radius: 6px; }
-.regla-user-head {
-  display: flex; justify-content: space-between; align-items: baseline;
-  gap: 8px; font-weight: 600; font-size: 0.9rem;
-}
-.regla-user-head .delta { color: var(--red); font-variant-numeric: tabular-nums; font-weight: 700; }
-.regla-changes { margin: 4px 0 0; padding-left: 18px; font-size: 0.82rem; color: var(--muted); }
-.regla-changes li { margin: 2px 0; }
-.regla-changes .regla-pts { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
+.hist-search { flex: 1; min-width: 160px; }
+.hist-search:focus, .hist-filters select:focus { outline: none; border-color: var(--red); }
+
+.hist-list { display: flex; flex-direction: column; gap: 8px; }
+.hist-item { background: var(--card); border-radius: 10px; box-shadow: var(--shadow); padding: 10px 12px; }
+.hist-item.played { border-left: 3px solid var(--green); }
+.hist-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hist-when { font-size: 0.76rem; color: var(--muted); }
+.hist-teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.hist-side { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hist-side.away { justify-content: flex-end; text-align: right; }
+.hist-side .name { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-score { font-weight: 800; font-size: 1rem; }
+.hist-pred { margin-top: 6px; }
 
 @media (min-width: 620px) {
   .groups-grid { grid-template-columns: 1fr 1fr; }

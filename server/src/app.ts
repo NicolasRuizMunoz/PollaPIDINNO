@@ -217,6 +217,35 @@ app.get(
   })
 );
 
+// historial del usuario: todas sus predicciones con resultado real y puntos,
+// en el orden en que se juegan (por fecha de kickoff).
+app.get(
+  "/api/me/predictions",
+  requireAuth,
+  ah(async (req: AuthedRequest, res) => {
+    const teams = await loadTeamMap();
+    const score = await activeScorer();
+    const rows = await dbAll<Record<string, unknown>>(
+      `SELECT m.*, p.home_score AS p_home, p.away_score AS p_away
+         FROM predictions p
+         JOIN matches m ON m.id = p.match_id
+        WHERE p.user_id = ?
+        ORDER BY m.kickoff_at, m.id`,
+      [req.user!.id]
+    );
+    const matches = rows.map((r) => {
+      const shaped = shapeMatch(r as never, teams);
+      const pred = { home: Number(r.p_home), away: Number(r.p_away) };
+      const points =
+        shaped.finished && shaped.homeScore !== null && shaped.awayScore !== null
+          ? score(pred, { home: shaped.homeScore, away: shaped.awayScore })
+          : null;
+      return { ...shaped, pred, points };
+    });
+    ok(res, { drawRuleActive: await drawRuleActive(), matches });
+  })
+);
+
 // ---------------------------------------------------------------- bonos
 
 app.get(

@@ -48,6 +48,17 @@ export interface MatchesResponse {
   drawRuleActive: boolean; // ¿ya rige la regla nueva del empate?
 }
 
+// historial del usuario: una predicción con su resultado real y puntos
+export interface MyMatch extends Match {
+  pred: { home: number; away: number };
+  points: number | null; // null si el partido aún no se juega/publica
+}
+
+export interface MyMatchesResponse {
+  drawRuleActive: boolean;
+  matches: MyMatch[];
+}
+
 export interface LeaderRow {
   userId: number;
   apodo: string;
@@ -221,6 +232,8 @@ export const api = {
   teams: () => req<(Team & { grp: string | null })[]>("/teams"),
 
   matches: () => req<MatchesResponse>("/matches"),
+
+  myMatches: () => req<MyMatchesResponse>("/me/predictions"),
 
   savePrediction: (matchId: number, home: number, away: number) =>
     req<{ home: number; away: number }>(`/predictions/${matchId}`, {

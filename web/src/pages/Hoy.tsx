@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useMatches } from "../useMatches";
 import { MatchCard } from "../components/MatchCard";
-import { ReglaEmpateBanner } from "../components/ReglaEmpateBanner";
 import { isToday, formatDate, dayKey, isLiveMatch } from "../util";
 import type { Match } from "../api";
 
@@ -54,8 +53,6 @@ export function Hoy() {
 
   return (
     <div>
-      <ReglaEmpateBanner />
-
       <h2>Partidos de hoy</h2>
       <p className="muted">{formatDate(new Date().toISOString())}</p>
 
