@@ -303,3 +303,54 @@ table.standings tr.qual .pos { color: var(--green); font-weight: 700; }
 @media (min-width: 620px) {
   .groups-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---- votaciones ---- */
+.polls { margin-bottom: 20px; }
+.poll-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+}
+.poll-q { font-weight: 600; margin: 0 0 10px; }
+.poll-options { display: flex; flex-direction: column; gap: 8px; }
+.poll-opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  overflow: hidden;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+}
+button.poll-opt { cursor: pointer; }
+button.poll-opt:hover:not(:disabled) { border-color: var(--muted); }
+button.poll-opt:disabled { cursor: default; }
+.poll-opt.mine { border-color: var(--red); background: #fff; font-weight: 600; }
+.poll-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: rgba(228, 0, 43, 0.12);
+  z-index: 0;
+  transition: width 0.3s ease;
+}
+.poll-opt.mine .poll-bar { background: rgba(228, 0, 43, 0.22); }
+.poll-opt-label, .poll-opt-count { position: relative; z-index: 1; }
+.poll-opt-count { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.poll-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}

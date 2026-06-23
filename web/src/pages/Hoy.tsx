@@ -1,6 +1,7 @@
 ﻿import { useEffect } from "react";
 import { useMatches } from "../useMatches";
 import { MatchCard } from "../components/MatchCard";
+import { Polls } from "../components/Polls";
 import { isToday, formatDate, dayKey, isLiveMatch } from "../util";
 import type { Match } from "../api";
 
@@ -53,6 +54,8 @@ export function Hoy() {
 
   return (
     <div>
+      <Polls />
+
       <h2>Partidos de hoy</h2>
       <p className="muted">{formatDate(new Date().toISOString())}</p>
 

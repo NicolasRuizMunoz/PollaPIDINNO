@@ -26,6 +26,8 @@ import {
   drawRuleActive,
   activeScorer,
   displayName,
+  pollsDeadline,
+  arePollsLocked,
 } from "./queries.js";
 import { groupStandings, completeGroups, bestThirds, resolveBracket } from "./advancement.js";
 import { updateLiveMatches } from "./live.js";
@@ -307,6 +309,95 @@ app.put(
   })
 );
 
+// ---------------------------------------------------------------- votaciones
+
+interface PollRow {
+  key: string;
+  question: string;
+  options: string; // JSON [{ value, label }]
+  results_public: number;
+  sort_order: number;
+}
+
+// Conteo de TODOS los polls en una sola consulta (evita N+1 contra Turso remoto).
+async function allPollCounts(): Promise<Record<string, { counts: Record<string, number>; total: number }>> {
+  const rows = await dbAll<{ poll_key: string; choice: string; n: number }>(
+    "SELECT poll_key, choice, COUNT(*) AS n FROM poll_votes GROUP BY poll_key, choice"
+  );
+  const by: Record<string, { counts: Record<string, number>; total: number }> = {};
+  for (const r of rows) {
+    const c = (by[r.poll_key] ??= { counts: {}, total: 0 });
+    c.counts[r.choice] = r.n;
+    c.total += r.n;
+  }
+  return by;
+}
+
+// Votación consultiva visible en "Hoy". El conteo solo se incluye si el poll
+// está revelado (results_public) o si quien pregunta es admin.
+app.get(
+  "/api/polls",
+  ah(async (req: AuthedRequest, res) => {
+    const isAdmin = req.user?.is_admin === 1;
+    // Consultas independientes en paralelo (1 round-trip en vez de ~9 en serie).
+    const [polls, countsByPoll, myVoteRows, deadline] = await Promise.all([
+      dbAll<PollRow>("SELECT * FROM polls ORDER BY sort_order, key"),
+      allPollCounts(),
+      req.user
+        ? dbAll<{ poll_key: string; choice: string }>(
+            "SELECT poll_key, choice FROM poll_votes WHERE user_id = ?",
+            [req.user.id]
+          )
+        : Promise.resolve([] as { poll_key: string; choice: string }[]),
+      pollsDeadline(),
+    ]);
+
+    const locked = deadline ? Date.now() >= new Date(deadline).getTime() : false;
+    const myVotes: Record<string, string> = {};
+    for (const r of myVoteRows) myVotes[r.poll_key] = r.choice;
+
+    const out = polls.map((p) => {
+      const reveal = p.results_public === 1 || isAdmin;
+      return {
+        key: p.key,
+        question: p.question,
+        options: JSON.parse(p.options) as { value: string; label: string }[],
+        myChoice: myVotes[p.key] ?? null,
+        resultsPublic: p.results_public === 1,
+        counts: reveal ? countsByPoll[p.key] ?? { counts: {}, total: 0 } : null,
+      };
+    });
+
+    ok(res, { deadline, locked, polls: out });
+  })
+);
+
+app.put(
+  "/api/polls/:key/vote",
+  requireAuth,
+  ah(async (req: AuthedRequest, res) => {
+    const key = req.params.key;
+    const { choice } = req.body ?? {};
+    if (typeof choice !== "string") throw new HttpError(400, "Falta la opción");
+
+    const poll = await dbGet<PollRow>("SELECT * FROM polls WHERE key = ?", [key]);
+    if (!poll) throw new HttpError(404, "Votación no existe");
+    if (await arePollsLocked()) throw new HttpError(403, "La votación ya está cerrada");
+
+    const options = JSON.parse(poll.options) as { value: string; label: string }[];
+    if (!options.some((o) => o.value === choice)) throw new HttpError(400, "Opción inválida");
+
+    await dbRun(
+      `INSERT INTO poll_votes (poll_key, user_id, choice, updated_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(poll_key, user_id)
+       DO UPDATE SET choice = excluded.choice, updated_at = datetime('now')`,
+      [key, req.user!.id, choice]
+    );
+    ok(res, { saved: true, choice });
+  })
+);
+
 // ---------------------------------------------------------------- en vivo (cron)
 
 // Lo llama un cron externo (cron-job.org, GitHub Actions, etc.) cada ~3 min.
@@ -443,9 +534,45 @@ app.put(
   "/api/admin/settings",
   requireAdmin,
   ah(async (req, res) => {
-    const { bonosDeadline: deadline } = req.body ?? {};
+    const { bonosDeadline: deadline, pollsDeadline: pDeadline } = req.body ?? {};
     if (deadline !== undefined) await setSetting("bonos_deadline", deadline || null);
+    if (pDeadline !== undefined) await setSetting("polls_deadline", pDeadline || null);
     ok(res, { saved: true });
+  })
+);
+
+// --- votaciones (admin) ---
+app.get(
+  "/api/admin/polls",
+  requireAdmin,
+  ah(async (_req, res) => {
+    const [polls, countsByPoll, deadline] = await Promise.all([
+      dbAll<PollRow>("SELECT * FROM polls ORDER BY sort_order, key"),
+      allPollCounts(),
+      pollsDeadline(),
+    ]);
+    const out = polls.map((p) => ({
+      key: p.key,
+      question: p.question,
+      options: JSON.parse(p.options) as { value: string; label: string }[],
+      resultsPublic: p.results_public === 1,
+      ...(countsByPoll[p.key] ?? { counts: {}, total: 0 }),
+    }));
+    ok(res, { deadline, polls: out });
+  })
+);
+
+app.put(
+  "/api/admin/polls/:key",
+  requireAdmin,
+  ah(async (req, res) => {
+    const key = req.params.key;
+    const { resultsPublic } = req.body ?? {};
+    if (typeof resultsPublic !== "boolean") throw new HttpError(400, "Falta resultsPublic");
+    const poll = await dbGet("SELECT key FROM polls WHERE key = ?", [key]);
+    if (!poll) throw new HttpError(404, "Votación no existe");
+    await dbRun("UPDATE polls SET results_public = ? WHERE key = ?", [resultsPublic ? 1 : 0, key]);
+    ok(res, { key, resultsPublic });
   })
 );
 

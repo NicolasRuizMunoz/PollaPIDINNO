@@ -161,6 +161,45 @@ export interface TournamentInfo {
   } | null;
 }
 
+// ---- votaciones ----
+
+export interface PollOption {
+  value: string;
+  label: string;
+}
+
+export interface PollCounts {
+  counts: Record<string, number>;
+  total: number;
+}
+
+export interface Poll {
+  key: string;
+  question: string;
+  options: PollOption[];
+  myChoice: string | null;
+  resultsPublic: boolean;
+  counts: PollCounts | null; // null si el conteo no está revelado para el usuario
+}
+
+export interface PollsResponse {
+  deadline: string | null;
+  locked: boolean;
+  polls: Poll[];
+}
+
+export interface AdminPoll extends PollCounts {
+  key: string;
+  question: string;
+  options: PollOption[];
+  resultsPublic: boolean;
+}
+
+export interface AdminPollsResponse {
+  deadline: string | null;
+  polls: AdminPoll[];
+}
+
 // ---- sesion ----
 
 export function getToken(): string | null {
@@ -252,6 +291,14 @@ export const api = {
 
   tournament: () => req<TournamentInfo>("/tournament"),
 
+  polls: () => req<PollsResponse>("/polls"),
+
+  votePoll: (key: string, choice: string) =>
+    req<{ saved: boolean; choice: string }>(`/polls/${key}/vote`, {
+      method: "PUT",
+      body: JSON.stringify({ choice }),
+    }),
+
   saveTournament: (picks: {
     champion: string | null;
     runnerUp: string | null;
@@ -299,10 +346,18 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  adminSettings: (data: { bonosDeadline: string | null }) =>
+  adminSettings: (data: { bonosDeadline?: string | null; pollsDeadline?: string | null }) =>
     req<{ saved: boolean }>("/admin/settings", {
       method: "PUT",
       body: JSON.stringify(data),
+    }),
+
+  adminPolls: () => req<AdminPollsResponse>("/admin/polls"),
+
+  adminSetPollResults: (key: string, resultsPublic: boolean) =>
+    req<{ key: string; resultsPublic: boolean }>(`/admin/polls/${key}`, {
+      method: "PUT",
+      body: JSON.stringify({ resultsPublic }),
     }),
 
   adminUsers: () =>

@@ -114,7 +114,57 @@ export async function initSchema(): Promise<void> {
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS polls (
+      key            TEXT PRIMARY KEY,
+      question       TEXT NOT NULL,
+      options        TEXT NOT NULL,                 -- JSON: [{ value, label }]
+      results_public INTEGER NOT NULL DEFAULT 0,    -- ¿mostrar el conteo a todos?
+      sort_order     INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS poll_votes (
+      poll_key   TEXT NOT NULL,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      choice     TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (poll_key, user_id)
+    );
   `);
+}
+
+/**
+ * Siembra los polls por defecto (votación consultiva de la comunidad).
+ * Idempotente: INSERT OR IGNORE por `key`, no pisa cambios posteriores.
+ */
+async function seedDefaultPolls(): Promise<void> {
+  const defaults: { key: string; question: string; options: { value: string; label: string }[]; order: number }[] = [
+    {
+      key: "ko_minutes",
+      question: "Para la fase eliminatoria, ¿qué resultado debería contar?",
+      options: [
+        { value: "90", label: "90 minutos" },
+        { value: "120", label: "120 minutos (con alargue)" },
+      ],
+      order: 1,
+    },
+    {
+      key: "quien_pasa",
+      question:
+        "¿Agregar el bonus \"quién pasa\"? (al predecir un empate eliges quién avanza; si fallas el ganador pero aciertas quién pasa, sumas 1 punto)",
+      options: [
+        { value: "si", label: "Sí, agregar la regla" },
+        { value: "no", label: "No, dejarlo igual" },
+      ],
+      order: 2,
+    },
+  ];
+  for (const p of defaults) {
+    await dbRun(
+      "INSERT OR IGNORE INTO polls (key, question, options, sort_order) VALUES (?, ?, ?, ?)",
+      [p.key, p.question, JSON.stringify(p.options), p.order]
+    );
+  }
 }
 
 // Migraciones para bases de datos ya existentes (cada ALTER es idempotente:
@@ -141,7 +191,7 @@ async function runMigrations(): Promise<void> {
 // asegura el esquema una sola vez por proceso (útil en serverless)
 let schemaPromise: Promise<void> | null = null;
 export function ensureSchema(): Promise<void> {
-  if (!schemaPromise) schemaPromise = initSchema().then(runMigrations);
+  if (!schemaPromise) schemaPromise = initSchema().then(runMigrations).then(seedDefaultPolls);
   return schemaPromise;
 }
 

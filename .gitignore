@@ -10,6 +10,7 @@ build/
 # variables de entorno
 .env
 .env.local
+.env.PROD
 
 # logs y temporales
 *.log

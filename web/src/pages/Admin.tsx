@@ -1,11 +1,11 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { api, getUser, type Match, type Team } from "../api";
+import { api, getUser, type AdminPoll, type Match, type Team } from "../api";
 import { sideName, isToday, dayKey, formatDate, isLiveMatch, liveLabel } from "../util";
 import { TeamSelect } from "../components/TeamSelect";
 import { Flag } from "../components/Flag";
 
 export function Admin() {
-  const [sub, setSub] = useState<"hoy" | "resultados" | "torneo" | "usuarios">("hoy");
+  const [sub, setSub] = useState<"hoy" | "resultados" | "torneo" | "votaciones" | "usuarios">("hoy");
   return (
     <div>
       <h2>Administración</h2>
@@ -19,6 +19,9 @@ export function Admin() {
         <button className={sub === "torneo" ? "active" : ""} onClick={() => setSub("torneo")}>
           Bonos y ajustes
         </button>
+        <button className={sub === "votaciones" ? "active" : ""} onClick={() => setSub("votaciones")}>
+          Votaciones
+        </button>
         <button className={sub === "usuarios" ? "active" : ""} onClick={() => setSub("usuarios")}>
           Usuarios
         </button>
@@ -26,6 +29,7 @@ export function Admin() {
       {sub === "hoy" && <AdminHoy />}
       {sub === "resultados" && <AdminResults />}
       {sub === "torneo" && <AdminTournament />}
+      {sub === "votaciones" && <AdminPolls />}
       {sub === "usuarios" && <AdminUsers />}
     </div>
   );
@@ -445,6 +449,109 @@ function AdminTournament() {
 
       {msg && <p className="hint ok">{msg}</p>}
       {error && <p className="err">{error}</p>}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------- votaciones
+
+function AdminPolls() {
+  const [polls, setPolls] = useState<AdminPoll[] | null>(null);
+  const [deadline, setDeadline] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function reload() {
+    api
+      .adminPolls()
+      .then((d) => {
+        setPolls(d.polls);
+        setDeadline(d.deadline ? toLocalInput(d.deadline) : "");
+      })
+      .catch((e) => setError(e.message));
+  }
+  useEffect(reload, []);
+
+  async function toggle(p: AdminPoll) {
+    setBusy(p.key);
+    setMsg(null);
+    setError(null);
+    try {
+      await api.adminSetPollResults(p.key, !p.resultsPublic);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveDeadline() {
+    setMsg(null);
+    setError(null);
+    try {
+      await api.adminSettings({ pollsDeadline: deadline ? new Date(deadline).toISOString() : null });
+      setMsg("Fecha de cierre de la votación actualizada ✓");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    }
+  }
+
+  if (error) return <p className="err center">{error}</p>;
+  if (!polls) return <p className="muted center">cargando…</p>;
+
+  return (
+    <div>
+      <h3>Votaciones de la comunidad</h3>
+      <p className="muted small">
+        El conteo lo ves siempre tú. Usa el botón de cada pregunta para mostrar u ocultar los
+        resultados al resto de los jugadores en la pantalla de Hoy.
+      </p>
+
+      {polls.map((p) => (
+        <div key={p.key} className="poll-card">
+          <p className="poll-q">{p.question}</p>
+          <div className="poll-options">
+            {p.options.map((o) => {
+              const n = p.counts[o.value] ?? 0;
+              const pct = p.total > 0 ? Math.round((n / p.total) * 100) : 0;
+              return (
+                <div key={o.value} className="poll-opt">
+                  <span className="poll-bar" style={{ width: `${pct}%` }} />
+                  <span className="poll-opt-label">{o.label}</span>
+                  <span className="poll-opt-count">{pct}% · {n}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="poll-foot">
+            <span className="muted small">{p.total} voto{p.total === 1 ? "" : "s"}</span>
+            <span className={`tag ${p.resultsPublic ? "tag-done" : ""}`}>
+              {p.resultsPublic ? "visible para todos" : "solo admin"}
+            </span>
+            <button
+              className={`btn${p.resultsPublic ? "" : " primary"}`}
+              disabled={busy === p.key}
+              onClick={() => toggle(p)}
+            >
+              {p.resultsPublic ? "Ocultar resultados" : "Mostrar resultados a todos"}
+            </button>
+          </div>
+        </div>
+      ))}
+
+      <h3 style={{ marginTop: 24 }}>Cierre de la votación</h3>
+      <p className="muted small">
+        Por defecto cierra cuando se juega el último partido de la jornada 3 de grupos. Puedes
+        ajustarlo aquí.
+      </p>
+      <div className="row">
+        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+        <button className="btn" onClick={saveDeadline}>Guardar fecha</button>
+      </div>
+
+      {msg && <p className="hint ok">{msg}</p>}
     </div>
   );
 }

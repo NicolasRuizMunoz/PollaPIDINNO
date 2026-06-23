@@ -78,6 +78,22 @@ export async function areBonosLocked(): Promise<boolean> {
   return Date.now() >= new Date(deadline).getTime();
 }
 
+/** Cierre de la votación de la comunidad: el último partido de la jornada 3 de grupos. */
+export async function pollsDeadline(): Promise<string | null> {
+  const explicit = await getSetting("polls_deadline");
+  if (explicit) return explicit;
+  const row = await dbGet<{ last: string | null }>(
+    "SELECT MAX(kickoff_at) AS last FROM matches WHERE stage = 'group' AND matchday = 3"
+  );
+  return row?.last ?? null;
+}
+
+export async function arePollsLocked(): Promise<boolean> {
+  const deadline = await pollsDeadline();
+  if (!deadline) return false;
+  return Date.now() >= new Date(deadline).getTime();
+}
+
 // --- regla del empate: disparador (gating) ---------------------------------
 // La regla NUEVA del empate entra a regir cuando se PUBLICA el partido
 // disparador (Colombia: id 232 = UZB-COL del 17/18-jun). Antes de eso, todo el
