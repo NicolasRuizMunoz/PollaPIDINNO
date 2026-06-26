@@ -22,7 +22,7 @@ export function MisPartidos() {
   const [estado, setEstado] = useState<Estado>("todos");
   const [acierto, setAcierto] = useState<Acierto>("todos");
   const [fase, setFase] = useState<Fase>("todas");
-  const [orden, setOrden] = useState<Orden>("cronologico");
+  const [orden, setOrden] = useState<Orden>("recientes");
 
   useEffect(() => {
     api
@@ -120,8 +120,8 @@ export function MisPartidos() {
           <option value="elim">Eliminatorias</option>
         </select>
         <select value={orden} onChange={(e) => setOrden(e.target.value as Orden)}>
-          <option value="cronologico">Cronológico</option>
           <option value="recientes">Recientes primero</option>
+          <option value="cronologico">Cronológico</option>
         </select>
       </div>
 

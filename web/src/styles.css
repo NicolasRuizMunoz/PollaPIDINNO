@@ -8,6 +8,9 @@
   --card: #ffffff;
   --green: #1f9d55;
   --green-bg: #e4f6ec;
+  --amber: #b7791f;
+  --amber-bg: #fdf3d8;
+  --red-bg: #fde4e8;
   --shadow: 0 1px 3px rgba(20, 24, 31, 0.08), 0 1px 2px rgba(20, 24, 31, 0.06);
 }
 
@@ -206,6 +209,8 @@ h3 { margin: 18px 0 8px; font-size: 1.05rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { background: #eef0f3; border-radius: 14px; padding: 3px 10px; font-size: 0.82rem; }
 .chip.qual { background: var(--green-bg); color: var(--green); font-weight: 600; }
+.chip.third { background: var(--amber-bg); color: var(--amber); font-weight: 600; }
+.chip.out { background: var(--red-bg); color: var(--red); font-weight: 600; }
 table.preds { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 table.preds td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
 table.preds td:last-child { text-align: right; }
@@ -235,6 +240,20 @@ table.standings .pos { color: var(--muted); width: 20px; }
 table.standings .total { font-weight: 700; }
 table.standings tr.qual { background: var(--green-bg); }
 table.standings tr.qual .pos { color: var(--green); font-weight: 700; }
+table.standings tr.third { background: var(--amber-bg); }
+table.standings tr.third .pos { color: var(--amber); font-weight: 700; }
+table.standings tr.out { background: var(--red-bg); }
+table.standings tr.out .pos { color: var(--red); font-weight: 700; }
+table.standings tr.out td:nth-child(2) { color: var(--muted); }
+.standings-legend {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  font-size: 0.78rem; color: var(--muted); margin: 8px 0 14px;
+}
+.standings-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.standings-legend .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.standings-legend .dot.qual { background: var(--green); }
+.standings-legend .dot.third { background: var(--amber); }
+.standings-legend .dot.out { background: var(--red); }
 .thirds { margin-top: 18px; }
 
 /* ---------- cuadro de eliminatorias (dos lados, plano, sin scroll) ---------- */

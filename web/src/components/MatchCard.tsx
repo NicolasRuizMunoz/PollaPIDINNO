@@ -203,7 +203,7 @@ function ParticipantsPanel({
       <div className="panel">
         <div className="panel-title">
           Ya confirmaron ({data.count})
-          <span className="muted"> · los marcadores se revelan cuando el admin publique el resultado</span>
+          <span className="muted"> · los pronósticos se revelan cuando empiece el partido</span>
         </div>
         {data.count === 0 ? (
           <p className="muted">Nadie ha confirmado todavía.</p>
@@ -218,25 +218,39 @@ function ParticipantsPanel({
     );
   }
 
+  // Ya empezó: se revelan los pronósticos. El resultado puede ser oficial,
+  // provisional (en vivo) o aún no haber resultado.
+  const result = data.match
+    ? data.result === "live"
+      ? `provisional ${data.match.homeScore}-${data.match.awayScore} (en vivo)`
+      : `resultado ${data.match.homeScore}-${data.match.awayScore}`
+    : "aún sin resultado";
+
   return (
     <div className="panel">
       <div className="panel-title">
-        Pronósticos ({data.count}) · resultado {data.match!.homeScore}-{data.match!.awayScore}
+        Pronósticos ({data.count}) · {result}
       </div>
       <table className="preds">
         <tbody>
           {data.predictions!.map((p) => {
-            const bd = scoreBreakdown(
-              { home: p.home, away: p.away },
-              { home: data.match!.homeScore, away: data.match!.awayScore },
-              drawRuleActive
-            );
+            const bd = data.match
+              ? scoreBreakdown(
+                  { home: p.home, away: p.away },
+                  { home: data.match.homeScore, away: data.match.awayScore },
+                  drawRuleActive
+                )
+              : null;
             return (
               <tr key={p.apodo}>
                 <td>{p.apodo}</td>
                 <td className="mono">{p.home} - {p.away}</td>
                 <td className="pts-cell">
-                  <PointsBadge points={p.points} rule={bd.rule} />
+                  {p.points !== null && bd ? (
+                    <PointsBadge points={p.points} rule={bd.rule} />
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
                 </td>
               </tr>
             );

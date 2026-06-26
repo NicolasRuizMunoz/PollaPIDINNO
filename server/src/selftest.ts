@@ -79,7 +79,7 @@ async function main() {
   const complete = await completeGroups();
   check("12 grupos con tabla", Object.keys(standings).length === 12);
   check("12 grupos completos", complete.size === 12);
-  check("8 mejores terceros", bestThirds(standings, complete).length === 8);
+  check("8 mejores terceros", bestThirds(standings).length === 8);
 
   await resolveBracket(true);
   check("dieciseisavos con ambos equipos (16)",

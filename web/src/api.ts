@@ -71,6 +71,10 @@ export interface LeaderRow {
   liveTotal: number;
 }
 
+// "qualified" = clasifica hoy (verde) · "third" = posible mejor tercero (amarillo)
+// "eliminated" = ya sin chance (rojo) · "alive" = sigue con opciones (neutro)
+export type StandingStatus = "qualified" | "third" | "eliminated" | "alive";
+
 export interface StandingRow {
   teamId: string;
   name: string;
@@ -83,6 +87,7 @@ export interface StandingRow {
   ga: number;
   gd: number;
   points: number;
+  status: StandingStatus;
   qualifies: boolean;
   position: number;
 }
@@ -95,9 +100,11 @@ export interface StandingsResponse {
 export interface MatchPredictions {
   revealed: boolean;
   count: number;
+  // estado del resultado cuando ya está revelado: oficial, en vivo o aún sin resultado
+  result?: "final" | "live" | "pending";
   confirmed?: { apodo: string }[];
-  match?: { homeScore: number; awayScore: number; finished: boolean };
-  predictions?: { apodo: string; home: number; away: number; points: number }[];
+  match?: { homeScore: number; awayScore: number; finished: boolean } | null;
+  predictions?: { apodo: string; home: number; away: number; points: number | null }[];
 }
 
 // Vista previa del cambio de regla del empate (propuesta, aún NO aplicada).

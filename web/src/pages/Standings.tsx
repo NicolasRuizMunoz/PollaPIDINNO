@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type StandingsResponse, type Match } from "../api";
+import { api, type StandingsResponse, type StandingRow, type Match } from "../api";
 import { Flag } from "../components/Flag";
 
 const STAGE_SHORT: Record<string, string> = {
@@ -47,12 +47,28 @@ export function Standings() {
   );
 }
 
+const STATUS_CLASS: Record<StandingRow["status"], string> = {
+  qualified: "qual",
+  third: "third",
+  eliminated: "out",
+  alive: "",
+};
+
 function GroupTables({ data }: { data: StandingsResponse }) {
+  const allRows = data.groups.flatMap((g) => g.rows);
   return (
     <div>
       <p className="muted small">
-        Clasifican 1º y 2º de cada grupo + los 8 mejores terceros (marcados en verde).
+        Orden y desempates según las reglas FIFA (puntos, enfrentamiento directo,
+        diferencia de gol, goles a favor). Clasifican 1º y 2º de cada grupo + los
+        8 mejores terceros, según van hoy las posiciones.
       </p>
+
+      <div className="standings-legend">
+        <span><i className="dot qual" /> Clasifica</span>
+        <span><i className="dot third" /> Posible mejor tercero</span>
+        <span><i className="dot out" /> Eliminado</span>
+      </div>
 
       <div className="groups-grid">
         {data.groups.map((g) => (
@@ -70,7 +86,7 @@ function GroupTables({ data }: { data: StandingsResponse }) {
               </thead>
               <tbody>
                 {g.rows.map((r) => (
-                  <tr key={r.teamId} className={r.qualifies ? "qual" : ""}>
+                  <tr key={r.teamId} className={STATUS_CLASS[r.status]}>
                     <td className="pos">{r.position}</td>
                     <td>
                       <Flag teamId={r.teamId} emoji={r.flag} /> {r.name}
@@ -88,7 +104,7 @@ function GroupTables({ data }: { data: StandingsResponse }) {
 
       {data.bestThirds.length > 0 && (
         <div className="thirds">
-          <h3>Mejores terceros clasificados</h3>
+          <h3>Mejores terceros (proyección actual)</h3>
           <div className="chips">
             {data.bestThirds.map((t) => (
               <span key={t.id} className="chip qual">
@@ -98,6 +114,42 @@ function GroupTables({ data }: { data: StandingsResponse }) {
           </div>
         </div>
       )}
+
+      <TeamChips
+        title="Posibles mejores terceros"
+        cls="third"
+        rows={allRows.filter((r) => r.status === "third")}
+      />
+      <TeamChips
+        title="Eliminados"
+        cls="out"
+        rows={allRows.filter((r) => r.status === "eliminated")}
+      />
+    </div>
+  );
+}
+
+/** Lista de equipos como chips, agrupados por estado (amarillos, eliminados…). */
+function TeamChips({
+  title,
+  cls,
+  rows,
+}: {
+  title: string;
+  cls: string;
+  rows: StandingRow[];
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="thirds">
+      <h3>{title}</h3>
+      <div className="chips">
+        {rows.map((r) => (
+          <span key={r.teamId} className={`chip ${cls}`}>
+            <Flag teamId={r.teamId} emoji={r.flag} /> {r.name}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -214,10 +266,12 @@ function BracketSide({
   score: number | null;
   win: boolean;
 }) {
+  // Solo banderas: para equipos definidos se muestra la bandera (nombre en el
+  // tooltip); para los cupos sin definir, el token corto (1°A, G·M2, etc.).
   return (
     <div className={`bk-side ${win ? "win" : ""} ${team ? "" : "tbd"}`} title={team?.name ?? undefined}>
-      <Flag teamId={team?.id} emoji={team?.flag} size={16} />
-      <span className="bk-name">{team ? team.name : shortSrc(src)}</span>
+      <Flag teamId={team?.id} emoji={team?.flag} size={20} />
+      <span className="bk-name">{team ? "" : shortSrc(src)}</span>
       <span className="bk-score">{score ?? ""}</span>
     </div>
   );

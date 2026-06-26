@@ -19,6 +19,7 @@ import {
   shapeMatch,
   allMatches,
   isMatchLocked,
+  isLive,
   areBonosLocked,
   bonosDeadline,
   leaderboard,
@@ -29,7 +30,7 @@ import {
   pollsDeadline,
   arePollsLocked,
 } from "./queries.js";
-import { groupStandings, completeGroups, bestThirds, resolveBracket } from "./advancement.js";
+import { groupStandings, bestThirds, eliminatedTeams, resolveBracket } from "./advancement.js";
 import { updateLiveMatches } from "./live.js";
 
 export const app = express();
@@ -171,17 +172,26 @@ app.put(
   })
 );
 
-// quien predijo un partido (apodos antes de publicar; pronosticos + puntos despues)
+// quien predijo un partido. Los pronosticos se revelan cuando el partido EMPIEZA
+// (ya nadie puede editar), no cuando el admin publica el resultado. Antes del
+// inicio solo se ven los apodos de quienes ya confirmaron.
 app.get(
   "/api/matches/:id/predictions",
   ah(async (req, res) => {
     const matchId = Number(req.params.id);
     const match = await dbGet<{
       id: number;
+      kickoff_at: string;
       home_score: number | null;
       away_score: number | null;
       finished: number;
-    }>("SELECT id, home_score, away_score, finished FROM matches WHERE id = ?", [matchId]);
+      status: string | null;
+      live_home: number | null;
+      live_away: number | null;
+    }>(
+      "SELECT id, kickoff_at, home_score, away_score, finished, status, live_home, live_away FROM matches WHERE id = ?",
+      [matchId]
+    );
     if (!match) throw new HttpError(404, "Partido no existe");
 
     // Solo usuarios activos: los inactivos no cuentan ni aparecen en la polla
@@ -193,27 +203,38 @@ app.get(
       [matchId]
     );
 
-    const revealed = !!match.finished && match.home_score !== null && match.away_score !== null;
+    const revealed = isMatchLocked(match.kickoff_at);
     if (!revealed) {
       ok(res, { revealed: false, count: rows.length, confirmed: rows.map((r) => ({ apodo: displayName(r.apodo, r.email) })) });
       return;
     }
 
-    const actual = { home: match.home_score!, away: match.away_score! };
+    // Mejor resultado disponible para calcular puntos: oficial > en vivo > ninguno.
+    let actual: { home: number; away: number } | null = null;
+    let result: "final" | "live" | "pending" = "pending";
+    if (match.finished && match.home_score !== null && match.away_score !== null) {
+      actual = { home: match.home_score, away: match.away_score };
+      result = "final";
+    } else if (isLive(match) && match.live_home !== null && match.live_away !== null) {
+      actual = { home: match.live_home, away: match.live_away };
+      result = "live";
+    }
+
     const score = await activeScorer();
     const predictions = rows
       .map((r) => ({
         apodo: displayName(r.apodo, r.email),
         home: r.home_score,
         away: r.away_score,
-        points: score({ home: r.home_score, away: r.away_score }, actual),
+        points: actual ? score({ home: r.home_score, away: r.away_score }, actual) : null,
       }))
-      .sort((a, b) => b.points - a.points || a.apodo.localeCompare(b.apodo));
+      .sort((a, b) => (b.points ?? -1) - (a.points ?? -1) || a.apodo.localeCompare(b.apodo));
 
     ok(res, {
       revealed: true,
+      result,
       count: rows.length,
-      match: { homeScore: match.home_score, awayScore: match.away_score, finished: true },
+      match: actual ? { homeScore: actual.home, awayScore: actual.away, finished: !!match.finished } : null,
       predictions,
     });
   })
@@ -439,22 +460,32 @@ app.get(
   "/api/standings",
   ah(async (_req, res) => {
     const standings = await groupStandings();
-    const complete = await completeGroups();
-    const thirds = bestThirds(standings, complete);
+    const thirds = bestThirds(standings); // proyección en vivo (posiciones actuales)
     const thirdSet = new Set(thirds);
+    const eliminated = await eliminatedTeams();
     const teams = await loadTeamMap();
 
     const groups = Object.entries(standings)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([grp, table]) => ({
         grp,
-        rows: table.map((s, idx) => ({
-          ...s,
-          name: teams.get(s.teamId)?.name ?? s.teamId,
-          flag: teams.get(s.teamId)?.flag ?? null,
-          qualifies: idx < 2 || thirdSet.has(s.teamId),
-          position: idx + 1,
-        })),
+        rows: table.map((s, idx) => {
+          const position = idx + 1;
+          // Prioridad: eliminado (rojo) > clasificado (verde) > posible 3º (amarillo)
+          let status: "qualified" | "third" | "eliminated" | "alive";
+          if (eliminated.has(s.teamId)) status = "eliminated";
+          else if (position <= 2 || thirdSet.has(s.teamId)) status = "qualified";
+          else if (position === 3) status = "third";
+          else status = "alive";
+          return {
+            ...s,
+            name: teams.get(s.teamId)?.name ?? s.teamId,
+            flag: teams.get(s.teamId)?.flag ?? null,
+            status,
+            qualifies: status === "qualified",
+            position,
+          };
+        }),
       }));
 
     ok(res, {

@@ -10,8 +10,7 @@ build/
 # variables de entorno
 .env
 .env.local
-.env.PROD
-
+.env.test
 # logs y temporales
 *.log
 .DS_Store
