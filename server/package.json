@@ -12,7 +12,8 @@
     "seed:backup": "tsx src/seed-from-backup.ts",
     "selftest": "tsx src/selftest.ts",
     "test:empate": "tsx src/drawrule.test.ts",
-    "test:adv": "tsx src/advancement.test.ts"
+    "test:adv": "tsx src/advancement.test.ts",
+    "test:advancer": "tsx src/advancer.test.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",

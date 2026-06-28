@@ -74,6 +74,9 @@ export async function initSchema(): Promise<void> {
       home_score   INTEGER,
       away_score   INTEGER,
       finished     INTEGER NOT NULL DEFAULT 0,
+      -- eliminatorias: equipo que AVANZA de ronda (lo fija el admin). Puede
+      -- diferir del marcador de 90/120 cuando se define por penales.
+      advancer     TEXT REFERENCES teams(id),
       -- seguimiento en vivo (provisional; no afecta el puntaje oficial)
       status          TEXT,
       live_home       INTEGER,
@@ -89,6 +92,8 @@ export async function initSchema(): Promise<void> {
       match_id   INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
       home_score INTEGER NOT NULL,
       away_score INTEGER NOT NULL,
+      -- eliminatorias: equipo que el usuario predice que AVANZA (bonus +1).
+      advances   TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE (user_id, match_id)
     );
@@ -186,6 +191,8 @@ async function runMigrations(): Promise<void> {
   await addColumn("ALTER TABLE matches ADD COLUMN minute INTEGER");
   await addColumn("ALTER TABLE matches ADD COLUMN api_fixture_id INTEGER");
   await addColumn("ALTER TABLE matches ADD COLUMN live_updated_at TEXT");
+  await addColumn("ALTER TABLE matches ADD COLUMN advancer TEXT");
+  await addColumn("ALTER TABLE predictions ADD COLUMN advances TEXT");
 }
 
 // asegura el esquema una sola vez por proceso (útil en serverless)

@@ -23,6 +23,7 @@ export const POINTS = {
   EXACT: 5,
   OUTCOME: 3,
   GOAL_DIFF_BONUS: 1,
+  ADVANCE_BONUS: 1,
   CHAMPION_BONUS: 15,
   TOURNAMENT_BONUS: 10,
 } as const;
@@ -118,6 +119,20 @@ export function scoreMatchDrawV2(pred: Score | null, actual: Score | null): numb
   }
 
   return points;
+}
+
+/**
+ * Bono de "quién pasa de ronda" (solo eliminatorias): +1 si el equipo que el
+ * usuario predijo que avanzaría coincide con el que el admin marcó como
+ * clasificado. Es INDEPENDIENTE del marcador: se gana aunque falles el resultado
+ * de los 90/120 (p. ej. predijiste un empate pero acertaste quién pasa por penales).
+ */
+export function scoreAdvance(
+  predAdvances: string | null | undefined,
+  actualAdvancer: string | null | undefined
+): number {
+  if (!predAdvances || !actualAdvancer) return 0;
+  return predAdvances === actualAdvancer ? POINTS.ADVANCE_BONUS : 0;
 }
 
 export interface TournamentPicks {

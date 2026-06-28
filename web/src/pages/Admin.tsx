@@ -1,11 +1,11 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { api, getUser, type AdminPoll, type Match, type Team } from "../api";
+import { api, getUser, type AdminPollsResponse, type Match, type Team } from "../api";
 import { sideName, isToday, dayKey, formatDate, isLiveMatch, liveLabel } from "../util";
 import { TeamSelect } from "../components/TeamSelect";
 import { Flag } from "../components/Flag";
 
 export function Admin() {
-  const [sub, setSub] = useState<"hoy" | "resultados" | "torneo" | "votaciones" | "usuarios">("hoy");
+  const [sub, setSub] = useState<"hoy" | "resultados" | "torneo" | "usuarios">("hoy");
   return (
     <div>
       <h2>Administración</h2>
@@ -19,9 +19,6 @@ export function Admin() {
         <button className={sub === "torneo" ? "active" : ""} onClick={() => setSub("torneo")}>
           Bonos y ajustes
         </button>
-        <button className={sub === "votaciones" ? "active" : ""} onClick={() => setSub("votaciones")}>
-          Votaciones
-        </button>
         <button className={sub === "usuarios" ? "active" : ""} onClick={() => setSub("usuarios")}>
           Usuarios
         </button>
@@ -29,7 +26,6 @@ export function Admin() {
       {sub === "hoy" && <AdminHoy />}
       {sub === "resultados" && <AdminResults />}
       {sub === "torneo" && <AdminTournament />}
-      {sub === "votaciones" && <AdminPolls />}
       {sub === "usuarios" && <AdminUsers />}
     </div>
   );
@@ -232,6 +228,7 @@ function AdminMatchRow({
   const [kickoff, setKickoff] = useState(toLocalInput(match.kickoffAt));
   const [homeTeam, setHomeTeam] = useState(match.home?.id ?? "");
   const [awayTeam, setAwayTeam] = useState(match.away?.id ?? "");
+  const [advancer, setAdvancer] = useState(match.advancer ?? "");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -243,9 +240,16 @@ function AdminMatchRow({
     try {
       const hs = home === "" ? null : Number(home);
       const as = away === "" ? null : Number(away);
+      // Si publica un partido decisivo de eliminatorias y no eligió "quién pasa",
+      // sugiere el ganador del marcador (los empates exigen elegir a mano: penales).
+      let adv = advancer;
+      if (isKnockout && publish && !adv && hs !== null && as !== null && hs !== as) {
+        adv = hs > as ? homeTeam : awayTeam;
+        setAdvancer(adv);
+      }
       await api.adminUpdateMatch(match.id, {
         kickoffAt: new Date(kickoff).toISOString(),
-        ...(isKnockout ? { homeTeam: homeTeam || null, awayTeam: awayTeam || null } : {}),
+        ...(isKnockout ? { homeTeam: homeTeam || null, awayTeam: awayTeam || null, advancer: adv || null } : {}),
         homeScore: hs,
         awayScore: as,
         finished: publish ? hs !== null && as !== null : match.finished,
@@ -325,6 +329,30 @@ function AdminMatchRow({
           </span>
         )}
       </div>
+
+      {isKnockout && (
+        <div className="admin-advancer">
+          <span className="muted small">Pasa de ronda:</span>
+          <select
+            className="team-select"
+            value={advancer}
+            onChange={(e) => setAdvancer(e.target.value)}
+            title="Equipo que avanza (define el cuadro; en empates por penales, elígelo a mano)"
+          >
+            <option value="">— sin definir —</option>
+            {homeTeam && (
+              <option value={homeTeam}>
+                {teams.find((t) => t.id === homeTeam)?.name ?? homeTeam}
+              </option>
+            )}
+            {awayTeam && (
+              <option value={awayTeam}>
+                {teams.find((t) => t.id === awayTeam)?.name ?? awayTeam}
+              </option>
+            )}
+          </select>
+        </div>
+      )}
 
       <div className="admin-match-foot">
         <label className="kickoff">
@@ -447,111 +475,75 @@ function AdminTournament() {
         <button className="btn" onClick={saveDeadline}>Guardar fecha</button>
       </div>
 
+      <AdminVotingResults />
+
       {msg && <p className="hint ok">{msg}</p>}
       {error && <p className="err">{error}</p>}
     </div>
   );
 }
 
-// ----------------------------------------------------------------- votaciones
+// --------------------------------------------------- resultado de la votación
 
-function AdminPolls() {
-  const [polls, setPolls] = useState<AdminPoll[] | null>(null);
-  const [deadline, setDeadline] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+/** Interruptor único para mostrar/ocultar a todos el resumen de la votación. */
+function AdminVotingResults() {
+  const [data, setData] = useState<AdminPollsResponse | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   function reload() {
-    api
-      .adminPolls()
-      .then((d) => {
-        setPolls(d.polls);
-        setDeadline(d.deadline ? toLocalInput(d.deadline) : "");
-      })
-      .catch((e) => setError(e.message));
+    api.adminPolls().then(setData).catch((e) => setErr(e.message));
   }
   useEffect(reload, []);
 
-  async function toggle(p: AdminPoll) {
-    setBusy(p.key);
-    setMsg(null);
-    setError(null);
+  async function toggle() {
+    if (!data) return;
+    setBusy(true);
+    setErr(null);
     try {
-      await api.adminSetPollResults(p.key, !p.resultsPublic);
+      await api.adminSettings({ showPollResults: !data.showResults });
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+      setErr(e instanceof Error ? e.message : "Error");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
-  async function saveDeadline() {
-    setMsg(null);
-    setError(null);
-    try {
-      await api.adminSettings({ pollsDeadline: deadline ? new Date(deadline).toISOString() : null });
-      setMsg("Fecha de cierre de la votación actualizada ✓");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
-    }
-  }
-
-  if (error) return <p className="err center">{error}</p>;
-  if (!polls) return <p className="muted center">cargando…</p>;
+  const winners = (data?.polls ?? [])
+    .map((p) => {
+      let best: { label: string; n: number } | null = null;
+      for (const o of p.options) {
+        const n = p.counts[o.value] ?? 0;
+        if (!best || n > best.n) best = { label: o.label, n };
+      }
+      if (!best || best.n === 0) return null;
+      return { key: p.key, label: best.label, n: best.n, pct: p.total > 0 ? Math.round((best.n / p.total) * 100) : 0 };
+    })
+    .filter((w): w is { key: string; label: string; n: number; pct: number } => !!w);
 
   return (
     <div>
-      <h3>Votaciones de la comunidad</h3>
+      <h3 style={{ marginTop: 24 }}>Resultado de la votación</h3>
       <p className="muted small">
-        El conteo lo ves siempre tú. Usa el botón de cada pregunta para mostrar u ocultar los
-        resultados al resto de los jugadores en la pantalla de Hoy.
+        Muestra u oculta a todos los jugadores el resumen con los resultados ganadores (aparece en
+        la pantalla de Hoy cuando la votación ya cerró). Si lo apagas, no ocupa espacio.
       </p>
-
-      {polls.map((p) => (
-        <div key={p.key} className="poll-card">
-          <p className="poll-q">{p.question}</p>
-          <div className="poll-options">
-            {p.options.map((o) => {
-              const n = p.counts[o.value] ?? 0;
-              const pct = p.total > 0 ? Math.round((n / p.total) * 100) : 0;
-              return (
-                <div key={o.value} className="poll-opt">
-                  <span className="poll-bar" style={{ width: `${pct}%` }} />
-                  <span className="poll-opt-label">{o.label}</span>
-                  <span className="poll-opt-count">{pct}% · {n}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="poll-foot">
-            <span className="muted small">{p.total} voto{p.total === 1 ? "" : "s"}</span>
-            <span className={`tag ${p.resultsPublic ? "tag-done" : ""}`}>
-              {p.resultsPublic ? "visible para todos" : "solo admin"}
-            </span>
-            <button
-              className={`btn${p.resultsPublic ? "" : " primary"}`}
-              disabled={busy === p.key}
-              onClick={() => toggle(p)}
-            >
-              {p.resultsPublic ? "Ocultar resultados" : "Mostrar resultados a todos"}
-            </button>
-          </div>
-        </div>
-      ))}
-
-      <h3 style={{ marginTop: 24 }}>Cierre de la votación</h3>
-      <p className="muted small">
-        Por defecto cierra cuando se juega el último partido de la jornada 3 de grupos. Puedes
-        ajustarlo aquí.
-      </p>
-      <div className="row">
-        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-        <button className="btn" onClick={saveDeadline}>Guardar fecha</button>
-      </div>
-
-      {msg && <p className="hint ok">{msg}</p>}
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={!!data?.showResults}
+          disabled={busy || !data}
+          onChange={toggle}
+        />
+        <span>{data?.showResults ? "Visible para todos" : "Oculto"}</span>
+      </label>
+      {winners.length > 0 && (
+        <p className="muted small">
+          Ganadores: {winners.map((w) => `${w.label} (${w.pct}% · ${w.n})`).join(" · ")}
+        </p>
+      )}
+      {err && <p className="err">{err}</p>}
     </div>
   );
 }

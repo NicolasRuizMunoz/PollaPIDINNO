@@ -31,6 +31,7 @@ import {
   arePollsLocked,
 } from "./queries.js";
 import { groupStandings, bestThirds, eliminatedTeams, resolveBracket } from "./advancement.js";
+import { scoreAdvance } from "./scoring.js";
 import { updateLiveMatches } from "./live.js";
 
 export const app = express();
@@ -126,13 +127,13 @@ app.get(
   ah(async (req: AuthedRequest, res) => {
     const teams = await loadTeamMap();
     const matches = (await allMatches()).map((m) => shapeMatch(m, teams));
-    const myPreds: Record<number, { home: number; away: number }> = {};
+    const myPreds: Record<number, { home: number; away: number; advances: string | null }> = {};
     if (req.user) {
-      const rows = await dbAll<{ match_id: number; home_score: number; away_score: number }>(
-        "SELECT match_id, home_score, away_score FROM predictions WHERE user_id = ?",
+      const rows = await dbAll<{ match_id: number; home_score: number; away_score: number; advances: string | null }>(
+        "SELECT match_id, home_score, away_score, advances FROM predictions WHERE user_id = ?",
         [req.user.id]
       );
-      for (const r of rows) myPreds[r.match_id] = { home: r.home_score, away: r.away_score };
+      for (const r of rows) myPreds[r.match_id] = { home: r.home_score, away: r.away_score, advances: r.advances ?? null };
     }
     ok(res, { matches, myPredictions: myPreds, drawRuleActive: await drawRuleActive() });
   })
@@ -149,26 +150,55 @@ app.put(
 
     const match = await dbGet<{
       id: number;
+      stage: string;
       kickoff_at: string;
       home_team: string | null;
       away_team: string | null;
-    }>("SELECT id, kickoff_at, home_team, away_team FROM matches WHERE id = ?", [matchId]);
+    }>("SELECT id, stage, kickoff_at, home_team, away_team FROM matches WHERE id = ?", [matchId]);
     if (!match) throw new HttpError(404, "Partido no existe");
     if (!match.home_team || !match.away_team)
       throw new HttpError(409, "Los equipos de este partido aun no estan definidos");
     if (isMatchLocked(match.kickoff_at))
       throw new HttpError(403, "El partido ya empezo, no puedes predecir");
 
-    await dbRun(
-      `INSERT INTO predictions (user_id, match_id, home_score, away_score, updated_at)
-       VALUES (?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(user_id, match_id)
-       DO UPDATE SET home_score = excluded.home_score,
-                     away_score = excluded.away_score,
-                     updated_at = datetime('now')`,
-      [req.user!.id, matchId, home, away]
-    );
-    ok(res, { home, away });
+    // "Quién pasa de ronda" (solo eliminatorias): se actualiza SOLO si el body lo
+    // trae (así un guardado de marcador no pisa una elección previa). Debe ser uno
+    // de los dos equipos, o null para borrarla.
+    const includeAdvances =
+      match.stage !== "group" &&
+      !!req.body &&
+      Object.prototype.hasOwnProperty.call(req.body, "advances");
+    let advances: string | null = null;
+    if (includeAdvances) {
+      const a = req.body.advances;
+      if (a === null || a === "") advances = null;
+      else if (a === match.home_team || a === match.away_team) advances = a;
+      else throw new HttpError(400, "El equipo que avanza debe ser uno de los dos del partido");
+    }
+
+    if (includeAdvances) {
+      await dbRun(
+        `INSERT INTO predictions (user_id, match_id, home_score, away_score, advances, updated_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id, match_id)
+         DO UPDATE SET home_score = excluded.home_score,
+                       away_score = excluded.away_score,
+                       advances   = excluded.advances,
+                       updated_at = datetime('now')`,
+        [req.user!.id, matchId, home, away, advances]
+      );
+    } else {
+      await dbRun(
+        `INSERT INTO predictions (user_id, match_id, home_score, away_score, updated_at)
+         VALUES (?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id, match_id)
+         DO UPDATE SET home_score = excluded.home_score,
+                       away_score = excluded.away_score,
+                       updated_at = datetime('now')`,
+        [req.user!.id, matchId, home, away]
+      );
+    }
+    ok(res, { home, away, ...(includeAdvances ? { advances } : {}) });
   })
 );
 
@@ -181,23 +211,25 @@ app.get(
     const matchId = Number(req.params.id);
     const match = await dbGet<{
       id: number;
+      stage: string;
       kickoff_at: string;
       home_score: number | null;
       away_score: number | null;
       finished: number;
+      advancer: string | null;
       status: string | null;
       live_home: number | null;
       live_away: number | null;
     }>(
-      "SELECT id, kickoff_at, home_score, away_score, finished, status, live_home, live_away FROM matches WHERE id = ?",
+      "SELECT id, stage, kickoff_at, home_score, away_score, finished, advancer, status, live_home, live_away FROM matches WHERE id = ?",
       [matchId]
     );
     if (!match) throw new HttpError(404, "Partido no existe");
 
     // Solo usuarios activos: los inactivos no cuentan ni aparecen en la polla
     // (igual que en la tabla de posiciones).
-    const rows = await dbAll<{ apodo: string; email: string; home_score: number; away_score: number }>(
-      `SELECT u.apodo, u.email, p.home_score, p.away_score
+    const rows = await dbAll<{ apodo: string; email: string; home_score: number; away_score: number; advances: string | null }>(
+      `SELECT u.apodo, u.email, p.home_score, p.away_score, p.advances
        FROM predictions p JOIN users u ON u.id = p.user_id
        WHERE p.match_id = ? AND u.is_active = 1 ORDER BY u.apodo`,
       [matchId]
@@ -221,13 +253,20 @@ app.get(
     }
 
     const score = await activeScorer();
+    const isKo = match.stage !== "group";
     const predictions = rows
-      .map((r) => ({
-        apodo: displayName(r.apodo, r.email),
-        home: r.home_score,
-        away: r.away_score,
-        points: actual ? score({ home: r.home_score, away: r.away_score }, actual) : null,
-      }))
+      .map((r) => {
+        const base = actual ? score({ home: r.home_score, away: r.away_score }, actual) : 0;
+        const advPts = match.advancer ? scoreAdvance(r.advances, match.advancer) : 0;
+        return {
+          apodo: displayName(r.apodo, r.email),
+          home: r.home_score,
+          away: r.away_score,
+          advances: isKo ? r.advances ?? null : null,
+          advancePoints: match.advancer ? advPts : null,
+          points: actual ? base + advPts : null,
+        };
+      })
       .sort((a, b) => (b.points ?? -1) - (a.points ?? -1) || a.apodo.localeCompare(b.apodo));
 
     ok(res, {
@@ -235,6 +274,7 @@ app.get(
       result,
       count: rows.length,
       match: actual ? { homeScore: actual.home, awayScore: actual.away, finished: !!match.finished } : null,
+      advancer: match.advancer ?? null,
       predictions,
     });
   })
@@ -249,7 +289,7 @@ app.get(
     const teams = await loadTeamMap();
     const score = await activeScorer();
     const rows = await dbAll<Record<string, unknown>>(
-      `SELECT m.*, p.home_score AS p_home, p.away_score AS p_away
+      `SELECT m.*, p.home_score AS p_home, p.away_score AS p_away, p.advances AS p_advances
          FROM predictions p
          JOIN matches m ON m.id = p.match_id
         WHERE p.user_id = ?
@@ -259,11 +299,16 @@ app.get(
     const matches = rows.map((r) => {
       const shaped = shapeMatch(r as never, teams);
       const pred = { home: Number(r.p_home), away: Number(r.p_away) };
-      const points =
-        shaped.finished && shaped.homeScore !== null && shaped.awayScore !== null
-          ? score(pred, { home: shaped.homeScore, away: shaped.awayScore })
-          : null;
-      return { ...shaped, pred, points };
+      const advances = (r.p_advances as string | null) ?? null;
+      const finishedWithScore =
+        shaped.finished && shaped.homeScore !== null && shaped.awayScore !== null;
+      const points = finishedWithScore
+        ? score(pred, { home: shaped.homeScore!, away: shaped.awayScore! })
+        : null;
+      // bono "quién pasa": +1 si acertaste el clasificado (independiente del marcador)
+      const advancePoints =
+        shaped.finished && shaped.advancer ? scoreAdvance(advances, shaped.advancer) : null;
+      return { ...shaped, pred, points, advances, advancePoints };
     });
     ok(res, { drawRuleActive: await drawRuleActive(), matches });
   })
@@ -361,7 +406,7 @@ app.get(
   ah(async (req: AuthedRequest, res) => {
     const isAdmin = req.user?.is_admin === 1;
     // Consultas independientes en paralelo (1 round-trip en vez de ~9 en serie).
-    const [polls, countsByPoll, myVoteRows, deadline] = await Promise.all([
+    const [polls, countsByPoll, myVoteRows, deadline, showResultsRaw] = await Promise.all([
       dbAll<PollRow>("SELECT * FROM polls ORDER BY sort_order, key"),
       allPollCounts(),
       req.user
@@ -371,14 +416,20 @@ app.get(
           )
         : Promise.resolve([] as { poll_key: string; choice: string }[]),
       pollsDeadline(),
+      getSetting("polls_show_results"),
     ]);
 
     const locked = deadline ? Date.now() >= new Date(deadline).getTime() : false;
+    // Interruptor global del admin (por defecto encendido). Controla si el
+    // resumen de resultados se muestra a los jugadores una vez cerrada la votación.
+    const showResults = showResultsRaw !== "0";
     const myVotes: Record<string, string> = {};
     for (const r of myVoteRows) myVotes[r.poll_key] = r.choice;
 
     const out = polls.map((p) => {
-      const reveal = p.results_public === 1 || isAdmin;
+      // Se revela el conteo a los jugadores solo si la votación cerró y el admin
+      // tiene encendido el interruptor. El admin siempre ve el conteo.
+      const reveal = isAdmin || (locked && showResults);
       return {
         key: p.key,
         question: p.question,
@@ -389,7 +440,7 @@ app.get(
       };
     });
 
-    ok(res, { deadline, locked, polls: out });
+    ok(res, { deadline, locked, showResults, polls: out });
   })
 );
 
@@ -506,9 +557,12 @@ app.put(
   requireAdmin,
   ah(async (req, res) => {
     const id = Number(req.params.id);
-    const { homeScore, awayScore, finished, kickoffAt, homeTeam, awayTeam, venue } =
+    const { homeScore, awayScore, finished, kickoffAt, homeTeam, awayTeam, venue, advancer } =
       req.body ?? {};
-    const match = await dbGet("SELECT id FROM matches WHERE id = ?", [id]);
+    const match = await dbGet<{ id: number; home_team: string | null; away_team: string | null }>(
+      "SELECT id, home_team, away_team FROM matches WHERE id = ?",
+      [id]
+    );
     if (!match) throw new HttpError(404, "Partido no existe");
 
     const sets: string[] = [];
@@ -524,6 +578,16 @@ app.put(
     if (homeTeam !== undefined) push("home_team", homeTeam || null);
     if (awayTeam !== undefined) push("away_team", awayTeam || null);
     if (venue !== undefined) push("venue", venue || null);
+    // "Quién avanza" (eliminatorias): debe ser uno de los dos equipos del partido
+    // (considerando los que se estén fijando en esta misma llamada), o null.
+    if (advancer !== undefined) {
+      const finalHome = homeTeam !== undefined ? homeTeam || null : match.home_team;
+      const finalAway = awayTeam !== undefined ? awayTeam || null : match.away_team;
+      const adv = advancer || null;
+      if (adv !== null && adv !== finalHome && adv !== finalAway)
+        throw new HttpError(400, "El equipo que avanza debe ser uno de los dos del partido");
+      push("advancer", adv);
+    }
     if (!sets.length) throw new HttpError(400, "Nada que actualizar");
 
     vals.push(id);
@@ -565,9 +629,11 @@ app.put(
   "/api/admin/settings",
   requireAdmin,
   ah(async (req, res) => {
-    const { bonosDeadline: deadline, pollsDeadline: pDeadline } = req.body ?? {};
+    const { bonosDeadline: deadline, pollsDeadline: pDeadline, showPollResults } = req.body ?? {};
     if (deadline !== undefined) await setSetting("bonos_deadline", deadline || null);
     if (pDeadline !== undefined) await setSetting("polls_deadline", pDeadline || null);
+    if (showPollResults !== undefined)
+      await setSetting("polls_show_results", showPollResults ? "1" : "0");
     ok(res, { saved: true });
   })
 );
@@ -577,10 +643,11 @@ app.get(
   "/api/admin/polls",
   requireAdmin,
   ah(async (_req, res) => {
-    const [polls, countsByPoll, deadline] = await Promise.all([
+    const [polls, countsByPoll, deadline, showResultsRaw] = await Promise.all([
       dbAll<PollRow>("SELECT * FROM polls ORDER BY sort_order, key"),
       allPollCounts(),
       pollsDeadline(),
+      getSetting("polls_show_results"),
     ]);
     const out = polls.map((p) => ({
       key: p.key,
@@ -589,7 +656,7 @@ app.get(
       resultsPublic: p.results_public === 1,
       ...(countsByPoll[p.key] ?? { counts: {}, total: 0 }),
     }));
-    ok(res, { deadline, polls: out });
+    ok(res, { deadline, showResults: showResultsRaw !== "0", polls: out });
   })
 );
 

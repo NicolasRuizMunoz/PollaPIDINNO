@@ -203,6 +203,30 @@ h3 { margin: 18px 0 8px; font-size: 1.05rem; }
 }
 .match-foot { display: flex; gap: 12px; align-items: center; justify-content: flex-end; margin-top: 8px; }
 
+/* ---------- "quién pasa de ronda" (eliminatorias) ---------- */
+.advancer {
+  margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line);
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+}
+.advancer-q { font-size: 0.8rem; font-weight: 600; }
+.advancer-opts { display: flex; gap: 6px; }
+.advancer-opt {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  padding: 4px 9px; border: 1.5px solid var(--line); border-radius: 999px;
+  background: var(--card); font-weight: 700; font-size: 0.8rem; color: var(--text);
+}
+.advancer-opt:disabled { cursor: default; opacity: 0.7; }
+.advancer-opt.sel { border-color: var(--accent, #2563eb); background: var(--accent-bg, #eff6ff); }
+.advancer-opt.ok { border-color: var(--green); background: var(--green-bg); }
+.advancer-opt.no { opacity: 0.5; }
+.advancer-opt .adv-check { color: var(--green, #16a34a); }
+.advancer-result { width: 100%; }
+
+.admin-advancer { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.preds .adv-cell { font-size: 0.78rem; white-space: nowrap; }
+.preds .adv-hit { color: var(--green, #16a34a); font-weight: 700; }
+.preds .adv-miss { color: var(--muted); }
+
 .panel { margin-top: 10px; background: #fafbfc; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
 .panel.err { color: var(--red); }
 .panel-title { font-size: 0.82rem; color: var(--muted); margin-bottom: 8px; }
@@ -268,10 +292,14 @@ table.standings tr.out td:nth-child(2) { color: var(--muted); }
 .bk-match.done { outline: 1px solid var(--green); }
 .bk-side { display: flex; align-items: center; gap: 4px; padding: 3px 5px; font-size: 0.72rem; line-height: 1.15; }
 .bk-side + .bk-side { border-top: 1px solid var(--line); }
-.bk-side .flag-img { flex: 0 0 auto; }
-.bk-side .bk-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.bk-side .flag-img { flex: 0 0 auto; height: 15px; width: 22px; object-fit: cover; border-radius: 2px; }
+.bk-side .flag { flex: 0 0 auto; width: 22px; text-align: center; font-size: 0.95rem; line-height: 1; }
+.bk-side .bk-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .bk-side .bk-score { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .bk-side.win { background: var(--green-bg); }
+.bk-side.lose { background: var(--red-bg, #fdecec); }
+.bk-side.lose .bk-name { color: var(--red, #dc2626); text-decoration: line-through; }
+.bk-side.lose .flag-img { filter: grayscale(0.5); opacity: 0.75; }
 .bk-side.tbd .bk-name { color: var(--muted); font-weight: 500; }
 .bk-third-inline { margin-top: 14px; }
 .bk-third-inline h4 { margin: 0 0 4px; text-align: center; font-size: 0.6rem; color: var(--muted); text-transform: uppercase; }
@@ -325,6 +353,21 @@ table.standings tr.out td:nth-child(2) { color: var(--muted); }
 
 /* ---- votaciones ---- */
 .polls { margin-bottom: 20px; }
+
+/* Votación cerrada: resumen compacto de una línea con los ganadores. */
+.polls-summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin-bottom: 16px; padding: 7px 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+  font-size: 0.82rem; box-shadow: var(--shadow);
+}
+.polls-summary .ps-label { font-weight: 700; color: var(--muted); }
+.polls-summary .ps-win {
+  font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--green-bg); color: var(--green);
+}
+.polls-summary .ps-win .ps-pct { font-weight: 600; opacity: 0.75; }
+.toggle-row { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; margin: 6px 0; cursor: pointer; }
+.toggle-row input { width: 16px; height: 16px; }
 .poll-card {
   background: var(--card);
   border: 1px solid var(--line);

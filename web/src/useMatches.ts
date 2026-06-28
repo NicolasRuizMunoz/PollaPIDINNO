@@ -20,17 +20,25 @@ export function useMatches() {
     reload();
   }, [reload]);
 
-  // actualiza la prediccion en memoria sin recargar todo
-  const onSaved = useCallback((matchId: number, home: number, away: number) => {
-    setData((prev) =>
-      prev
-        ? {
-            ...prev,
-            myPredictions: { ...prev.myPredictions, [matchId]: { home, away } },
-          }
-        : prev
-    );
-  }, []);
+  // actualiza la prediccion en memoria sin recargar todo. `advances` undefined =
+  // se conserva la elección previa de "quién pasa" (un guardado de marcador no la pisa).
+  const onSaved = useCallback(
+    (matchId: number, home: number, away: number, advances?: string | null) => {
+      setData((prev) => {
+        if (!prev) return prev;
+        const existing = prev.myPredictions[matchId];
+        const nextAdvances = advances !== undefined ? advances : existing?.advances ?? null;
+        return {
+          ...prev,
+          myPredictions: {
+            ...prev.myPredictions,
+            [matchId]: { home, away, advances: nextAdvances },
+          },
+        };
+      });
+    },
+    []
+  );
 
   return { data, loading, error, reload, onSaved };
 }

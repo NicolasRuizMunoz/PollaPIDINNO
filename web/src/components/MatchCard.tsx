@@ -20,13 +20,15 @@ export function MatchCard({
   drawRuleActive = false,
 }: {
   match: Match;
-  myPred?: { home: number; away: number };
-  onSaved?: (matchId: number, home: number, away: number) => void;
+  myPred?: { home: number; away: number; advances?: string | null };
+  onSaved?: (matchId: number, home: number, away: number, advances?: string | null) => void;
   drawRuleActive?: boolean;
 }) {
   const editable = !match.locked && hasTeams(match);
+  const isKnockout = match.stage !== "group";
   const [home, setHome] = useState(myPred ? String(myPred.home) : "");
   const [away, setAway] = useState(myPred ? String(myPred.away) : "");
+  const [advances, setAdvances] = useState<string | null>(myPred?.advances ?? null);
   const [save, setSave] = useState<SaveState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [showPanel, setShowPanel] = useState(false);
@@ -35,6 +37,10 @@ export function MatchCard({
     setHome(myPred ? String(myPred.home) : "");
     setAway(myPred ? String(myPred.away) : "");
   }, [myPred?.home, myPred?.away]);
+
+  useEffect(() => {
+    setAdvances(myPred?.advances ?? null);
+  }, [myPred?.advances]);
 
   const timer = useRef<number | undefined>(undefined);
   const lastSaved = useRef<string>(myPred ? `${myPred.home}-${myPred.away}` : "");
@@ -60,6 +66,36 @@ export function MatchCard({
       }
     }, 600);
   }
+
+  // "Quién pasa de ronda" (solo eliminatorias): guarda el clasificado junto con el
+  // marcador actual. Requiere un marcador válido (la predicción guarda home/away).
+  async function pickAdvancer(teamId: string) {
+    const hi = parseInt(home, 10);
+    const ai = parseInt(away, 10);
+    if (!Number.isInteger(hi) || !Number.isInteger(ai) || hi < 0 || ai < 0) {
+      setSave("error");
+      setError("Ingresa primero tu marcador");
+      return;
+    }
+    const next = advances === teamId ? null : teamId; // volver a tocar = quitar
+    setAdvances(next);
+    setSave("saving");
+    setError(null);
+    try {
+      await api.savePrediction(match.id, hi, ai, next);
+      lastSaved.current = `${hi}-${ai}`;
+      setSave("saved");
+      onSaved?.(match.id, hi, ai, next);
+      window.setTimeout(() => setSave("idle"), 1500);
+    } catch (e) {
+      setAdvances(myPred?.advances ?? null); // revertir si falló
+      setSave("error");
+      setError(e instanceof Error ? e.message : "Error al guardar");
+    }
+  }
+
+  const advancerTeam =
+    match.advancer === match.home?.id ? match.home : match.advancer === match.away?.id ? match.away : null;
 
   const userBreakdown =
     match.finished && myPred
@@ -123,6 +159,45 @@ export function MatchCard({
         </div>
       </div>
 
+      {isKnockout && hasTeams(match) && (
+        <div className="advancer">
+          <span className="advancer-q">¿Quién pasa de ronda? <span className="muted">(+1)</span></span>
+          <div className="advancer-opts">
+            {[match.home!, match.away!].map((t) => {
+              const selected = advances === t.id;
+              const isActual = match.advancer === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`advancer-opt ${selected ? "sel" : ""} ${
+                    match.finished && match.advancer ? (isActual ? "ok" : "no") : ""
+                  }`}
+                  disabled={!editable}
+                  onClick={() => pickAdvancer(t.id)}
+                  title={t.name}
+                >
+                  <Flag teamId={t.id} emoji={t.flag} size={16} />
+                  <span className="adv-code">{t.id}</span>
+                  {selected && <span className="adv-check">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+          {match.finished && advancerTeam && (
+            <span className="advancer-result muted small">
+              Pasó: <strong>{advancerTeam.name}</strong>
+              {myPred?.advances &&
+                (myPred.advances === match.advancer ? (
+                  <span className="pts"> acertaste +1 ✓</span>
+                ) : (
+                  <span className="pts zero"> +0</span>
+                ))}
+            </span>
+          )}
+        </div>
+      )}
+
       {live && (
         <div className="match-result live">
           {match.status === "FT" ? "✅ Final (provisional):" : "🔴 Va:"}{" "}
@@ -169,7 +244,9 @@ export function MatchCard({
         </button>
       </div>
 
-      {showPanel && <ParticipantsPanel matchId={match.id} drawRuleActive={drawRuleActive} />}
+      {showPanel && (
+        <ParticipantsPanel matchId={match.id} drawRuleActive={drawRuleActive} isKnockout={isKnockout} />
+      )}
     </div>
   );
 }
@@ -177,9 +254,11 @@ export function MatchCard({
 function ParticipantsPanel({
   matchId,
   drawRuleActive = false,
+  isKnockout = false,
 }: {
   matchId: number;
   drawRuleActive?: boolean;
+  isKnockout?: boolean;
 }) {
   const [data, setData] = useState<MatchPredictions | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -245,6 +324,22 @@ function ParticipantsPanel({
               <tr key={p.apodo}>
                 <td>{p.apodo}</td>
                 <td className="mono">{p.home} - {p.away}</td>
+                {isKnockout && (
+                  <td className="mono adv-cell" title="Quién pasa">
+                    {p.advances ? (
+                      <span
+                        className={
+                          data.advancer ? (p.advances === data.advancer ? "adv-hit" : "adv-miss") : ""
+                        }
+                      >
+                        ⏩{p.advances}
+                        {data.advancer && p.advances === data.advancer ? " ✓" : ""}
+                      </span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                )}
                 <td className="pts-cell">
                   {p.points !== null && bd ? (
                     <PointsBadge points={p.points} rule={bd.rule} />

@@ -35,6 +35,7 @@ export interface Match {
   homeScore: number | null;
   awayScore: number | null;
   finished: boolean;
+  advancer: string | null; // eliminatorias: equipo que el admin marcó que avanza
   locked: boolean;
   status: string | null; // "LIVE" | "HT" | "FT" | "NS" | null
   liveHome: number | null;
@@ -44,7 +45,7 @@ export interface Match {
 
 export interface MatchesResponse {
   matches: Match[];
-  myPredictions: Record<number, { home: number; away: number }>;
+  myPredictions: Record<number, { home: number; away: number; advances: string | null }>;
   drawRuleActive: boolean; // ¿ya rige la regla nueva del empate?
 }
 
@@ -52,6 +53,8 @@ export interface MatchesResponse {
 export interface MyMatch extends Match {
   pred: { home: number; away: number };
   points: number | null; // null si el partido aún no se juega/publica
+  advances: string | null; // a quién predijo que pasa (eliminatorias)
+  advancePoints: number | null; // +1 si acertó el clasificado (null si no aplica aún)
 }
 
 export interface MyMatchesResponse {
@@ -104,7 +107,15 @@ export interface MatchPredictions {
   result?: "final" | "live" | "pending";
   confirmed?: { apodo: string }[];
   match?: { homeScore: number; awayScore: number; finished: boolean } | null;
-  predictions?: { apodo: string; home: number; away: number; points: number | null }[];
+  advancer?: string | null; // quién avanzó (eliminatorias), si el admin lo marcó
+  predictions?: {
+    apodo: string;
+    home: number;
+    away: number;
+    advances?: string | null; // a quién predijo que pasa (eliminatorias)
+    advancePoints?: number | null; // +1 si acertó (null si aún no se sabe)
+    points: number | null;
+  }[];
 }
 
 // Vista previa del cambio de regla del empate (propuesta, aún NO aplicada).
@@ -192,6 +203,7 @@ export interface Poll {
 export interface PollsResponse {
   deadline: string | null;
   locked: boolean;
+  showResults: boolean; // ¿el admin tiene encendido mostrar resultados a todos?
   polls: Poll[];
 }
 
@@ -204,6 +216,7 @@ export interface AdminPoll extends PollCounts {
 
 export interface AdminPollsResponse {
   deadline: string | null;
+  showResults: boolean;
   polls: AdminPoll[];
 }
 
@@ -281,10 +294,11 @@ export const api = {
 
   myMatches: () => req<MyMatchesResponse>("/me/predictions"),
 
-  savePrediction: (matchId: number, home: number, away: number) =>
-    req<{ home: number; away: number }>(`/predictions/${matchId}`, {
+  // `advances` (eliminatorias): undefined = no tocar; null = borrar; id = fijar.
+  savePrediction: (matchId: number, home: number, away: number, advances?: string | null) =>
+    req<{ home: number; away: number; advances?: string | null }>(`/predictions/${matchId}`, {
       method: "PUT",
-      body: JSON.stringify({ home, away }),
+      body: JSON.stringify({ home, away, ...(advances !== undefined ? { advances } : {}) }),
     }),
 
   matchPredictions: (matchId: number) =>
@@ -330,6 +344,7 @@ export const api = {
       homeTeam: string | null;
       awayTeam: string | null;
       venue: string | null;
+      advancer: string | null;
     }>
   ) =>
     req<{ match: Match; bracketAssigned: number }>(`/admin/matches/${id}`, {
@@ -353,7 +368,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  adminSettings: (data: { bonosDeadline?: string | null; pollsDeadline?: string | null }) =>
+  adminSettings: (data: {
+    bonosDeadline?: string | null;
+    pollsDeadline?: string | null;
+    showPollResults?: boolean;
+  }) =>
     req<{ saved: boolean }>("/admin/settings", {
       method: "PUT",
       body: JSON.stringify(data),

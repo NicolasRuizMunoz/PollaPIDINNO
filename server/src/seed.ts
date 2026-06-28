@@ -210,6 +210,7 @@ function srcLabel(src: string): string {
     case "WG": return `1º Grupo ${arg}`;
     case "RU": return `2º Grupo ${arg}`;
     case "TH": return `Mejor 3º (${arg})`;
+    case "T3": return `3º Grupo ${arg}`;
     case "WM": return `Ganador ${arg}`;
     case "LM": return `Perdedor ${arg}`;
     default:   return "Por definir";
@@ -277,20 +278,23 @@ export async function seed() {
   const KNOCKOUT: KO[] = [
     // Dieciseisavos — 28 jun al 3 jul (fechas FIFA oficiales; horas estimadas — ajustar por admin)
     { code:"M1",  stage:"r32",   label:"Dieciseisavos #1",  home:"RU:A",  away:"RU:B",  m:6, d:28, h:21 },
-    { code:"M2",  stage:"r32",   label:"Dieciseisavos #2",  home:"WG:E",  away:"TH:1",  m:6, d:29, h:19 },
+    // Cruces 1º-vs-3º: el 3º que enfrenta a cada 1º lo fija la FIFA (Anexo C)
+    // según qué grupos clasifican un tercero. Para los terceros reales de 2026
+    // (grupos B,D,E,F,I,J,K,L → combinación oficial #67) la asignación es:
+    { code:"M2",  stage:"r32",   label:"Dieciseisavos #2",  home:"WG:E",  away:"T3:D",  m:6, d:29, h:19 },
     { code:"M3",  stage:"r32",   label:"Dieciseisavos #3",  home:"WG:F",  away:"RU:C",  m:6, d:29, h:22 },
     { code:"M4",  stage:"r32",   label:"Dieciseisavos #4",  home:"WG:C",  away:"RU:F",  m:6, d:30, h: 1 },
-    { code:"M5",  stage:"r32",   label:"Dieciseisavos #5",  home:"WG:I",  away:"TH:2",  m:6, d:30, h:19 },
+    { code:"M5",  stage:"r32",   label:"Dieciseisavos #5",  home:"WG:I",  away:"T3:F",  m:6, d:30, h:19 },
     { code:"M6",  stage:"r32",   label:"Dieciseisavos #6",  home:"RU:E",  away:"RU:I",  m:6, d:30, h:22 },
-    { code:"M7",  stage:"r32",   label:"Dieciseisavos #7",  home:"WG:A",  away:"TH:3",  m:7, d: 1, h: 1 },
-    { code:"M8",  stage:"r32",   label:"Dieciseisavos #8",  home:"WG:L",  away:"TH:4",  m:7, d: 1, h:20 },
-    { code:"M9",  stage:"r32",   label:"Dieciseisavos #9",  home:"WG:D",  away:"TH:5",  m:7, d: 1, h:23 },
-    { code:"M10", stage:"r32",   label:"Dieciseisavos #10", home:"WG:G",  away:"TH:6",  m:7, d: 2, h: 2 },
+    { code:"M7",  stage:"r32",   label:"Dieciseisavos #7",  home:"WG:A",  away:"T3:E",  m:7, d: 1, h: 1 },
+    { code:"M8",  stage:"r32",   label:"Dieciseisavos #8",  home:"WG:L",  away:"T3:K",  m:7, d: 1, h:20 },
+    { code:"M9",  stage:"r32",   label:"Dieciseisavos #9",  home:"WG:D",  away:"T3:B",  m:7, d: 1, h:23 },
+    { code:"M10", stage:"r32",   label:"Dieciseisavos #10", home:"WG:G",  away:"T3:I",  m:7, d: 2, h: 2 },
     { code:"M11", stage:"r32",   label:"Dieciseisavos #11", home:"RU:K",  away:"RU:L",  m:7, d: 2, h:19 },
     { code:"M12", stage:"r32",   label:"Dieciseisavos #12", home:"WG:H",  away:"RU:J",  m:7, d: 2, h:22 },
-    { code:"M13", stage:"r32",   label:"Dieciseisavos #13", home:"WG:B",  away:"TH:7",  m:7, d: 3, h: 1 },
+    { code:"M13", stage:"r32",   label:"Dieciseisavos #13", home:"WG:B",  away:"T3:J",  m:7, d: 3, h: 1 },
     { code:"M14", stage:"r32",   label:"Dieciseisavos #14", home:"WG:J",  away:"RU:H",  m:7, d: 3, h:20 },
-    { code:"M15", stage:"r32",   label:"Dieciseisavos #15", home:"WG:K",  away:"TH:8",  m:7, d: 3, h:23 },
+    { code:"M15", stage:"r32",   label:"Dieciseisavos #15", home:"WG:K",  away:"T3:L",  m:7, d: 3, h:23 },
     { code:"M16", stage:"r32",   label:"Dieciseisavos #16", home:"RU:D",  away:"RU:G",  m:7, d: 4, h: 2 },
     // Octavos — 4 al 7 jul (P89–P96)
     { code:"O1",  stage:"r16",   label:"Octavos #1",        home:"WM:M2", away:"WM:M5", m:7, d: 4, h:21 },

@@ -230,13 +230,24 @@ function Bracket({ matches }: { matches: Match[] }) {
 }
 
 function BracketMatch({ m }: { m: Match }) {
+  // Quién avanza: si el admin marcó al clasificado, eso manda (cubre los empates
+  // resueltos por penales); si no, se deduce del marcador publicado.
   const decided = m.finished && m.homeScore !== null && m.awayScore !== null;
-  const homeWin = decided && (m.homeScore as number) > (m.awayScore as number);
-  const awayWin = decided && (m.awayScore as number) > (m.homeScore as number);
+  let homeWin = false;
+  let awayWin = false;
+  if (m.advancer && (m.home || m.away)) {
+    homeWin = !!m.home && m.advancer === m.home.id;
+    awayWin = !!m.away && m.advancer === m.away.id;
+  } else if (decided) {
+    homeWin = (m.homeScore as number) > (m.awayScore as number);
+    awayWin = (m.awayScore as number) > (m.homeScore as number);
+  }
+  // El ELIMINADO es el lado que perdió una llave ya resuelta (hay un clasificado).
+  const resolved = homeWin || awayWin;
   return (
     <div className={`bk-match ${m.finished ? "done" : ""}`}>
-      <BracketSide team={m.home} src={m.homeSrc} score={m.homeScore} win={homeWin} />
-      <BracketSide team={m.away} src={m.awaySrc} score={m.awayScore} win={awayWin} />
+      <BracketSide team={m.home} src={m.homeSrc} score={m.homeScore} win={homeWin} lose={resolved && !homeWin && !!m.home} />
+      <BracketSide team={m.away} src={m.awaySrc} score={m.awayScore} win={awayWin} lose={resolved && !awayWin && !!m.away} />
     </div>
   );
 }
@@ -249,6 +260,7 @@ function shortSrc(src: string | null): string {
     case "WG": return `1°${arg}`;
     case "RU": return `2°${arg}`;
     case "TH": return `3°·${arg}`;
+    case "T3": return `3°${arg}`;
     case "WM": return `G·${arg}`;
     case "LM": return `P·${arg}`;
     default: return "—";
@@ -260,18 +272,24 @@ function BracketSide({
   src,
   score,
   win,
+  lose = false,
 }: {
   team: Match["home"];
   src: string | null;
   score: number | null;
   win: boolean;
+  lose?: boolean;
 }) {
-  // Solo banderas: para equipos definidos se muestra la bandera (nombre en el
-  // tooltip); para los cupos sin definir, el token corto (1°A, G·M2, etc.).
+  // Bandera (siempre del mismo tamaño) + clave de 3 letras del equipo (BRA, ARG…).
+  // Para cupos sin definir se muestra el token corto (1°A, G·M2, etc.).
+  // `lose` = equipo eliminado en esta llave → se pinta en rojo.
   return (
-    <div className={`bk-side ${win ? "win" : ""} ${team ? "" : "tbd"}`} title={team?.name ?? undefined}>
+    <div
+      className={`bk-side ${win ? "win" : ""} ${lose ? "lose" : ""} ${team ? "" : "tbd"}`}
+      title={team?.name ?? undefined}
+    >
       <Flag teamId={team?.id} emoji={team?.flag} size={20} />
-      <span className="bk-name">{team ? "" : shortSrc(src)}</span>
+      <span className="bk-name">{team ? team.id : shortSrc(src)}</span>
       <span className="bk-score">{score ?? ""}</span>
     </div>
   );

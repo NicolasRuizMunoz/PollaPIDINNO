@@ -6,6 +6,7 @@ export function Polls() {
   const [polls, setPolls] = useState<Poll[] | null>(null);
   const [deadline, setDeadline] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
+  const [showResults, setShowResults] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -15,6 +16,7 @@ export function Polls() {
         setPolls(d.polls);
         setDeadline(d.deadline);
         setLocked(d.locked);
+        setShowResults(d.showResults);
       })
       .catch(() => setPolls([]));
   }, []);
@@ -50,6 +52,30 @@ export function Polls() {
 
   if (!polls || polls.length === 0) return null;
 
+  // Cerrada: resumen compacto con los resultados ganadores (ocupa poco espacio).
+  // Solo se muestra si el admin tiene encendido "mostrar resultados"; si está
+  // apagado no se renderiza nada (no ocupa espacio).
+  if (locked) {
+    if (!showResults) return null;
+    const winners = polls
+      .map((p) => ({ key: p.key, question: p.question, win: winnerOf(p) }))
+      .filter((w): w is { key: string; question: string; win: Winner } => !!w.win);
+    if (winners.length === 0) return null;
+    return (
+      <div className="polls-summary">
+        <span className="ps-label">🗳️ Votación cerrada — ganó:</span>
+        {winners.map((w) => (
+          <span key={w.key} className="ps-win" title={w.question}>
+            {w.win.label}{" "}
+            <span className="ps-pct">
+              {w.win.pct}% · {w.win.n} voto{w.win.n === 1 ? "" : "s"}
+            </span>
+          </span>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="polls">
       <div className="section-head">
@@ -57,13 +83,27 @@ export function Polls() {
         {!locked && deadline && (
           <span className="muted small">Abierta hasta el {formatDateTime(deadline)}</span>
         )}
-        {locked && <span className="tag">cerrada</span>}
       </div>
       {polls.map((p) => (
         <PollCard key={p.key} poll={p} locked={locked} err={errors[p.key]} onVote={vote} />
       ))}
     </div>
   );
+}
+
+interface Winner { label: string; pct: number; n: number }
+
+/** Opción más votada de un poll (o null si no hay conteo/votos). */
+function winnerOf(poll: Poll): Winner | null {
+  if (!poll.counts || poll.counts.total === 0) return null;
+  let best: { value: string; n: number } | null = null;
+  for (const o of poll.options) {
+    const n = poll.counts.counts[o.value] ?? 0;
+    if (!best || n > best.n) best = { value: o.value, n };
+  }
+  if (!best || best.n === 0) return null;
+  const opt = poll.options.find((o) => o.value === best!.value)!;
+  return { label: opt.label, pct: Math.round((best.n / poll.counts.total) * 100), n: best.n };
 }
 
 function PollCard({

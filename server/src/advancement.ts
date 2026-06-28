@@ -29,6 +29,7 @@ interface MatchRow {
   home_score: number | null;
   away_score: number | null;
   finished: number;
+  advancer: string | null;
 }
 
 export interface Standing {
@@ -246,10 +247,26 @@ function resolveSource(
       return standings[arg]?.[1]?.teamId ?? null;
     case "TH":
       return thirds[Number(arg) - 1] ?? null;
+    case "T3":
+      // Tercero de un grupo concreto (asignación oficial FIFA por combinación,
+      // Anexo C). A diferencia de TH:n (por ranking), aquí el cruce 1º-vs-3º es
+      // el que publica la FIFA para los terceros que clasificaron.
+      if (requireComplete && !requireComplete(arg)) return null;
+      return standings[arg]?.[2]?.teamId ?? null;
     case "WM":
     case "LM": {
       const m = matchByCode.get(arg);
-      if (!m || !m.finished || m.home_score === null || m.away_score === null)
+      if (!m) return null;
+      // Si el admin marcó quién AVANZA, eso manda (más allá del marcador: cubre
+      // los empates definidos por penales). El perdedor es el otro lado.
+      if (m.advancer) {
+        const home = resolvedTeam(m, "home");
+        const away = resolvedTeam(m, "away");
+        const loser = m.advancer === home ? away : home;
+        return kind === "WM" ? m.advancer : loser;
+      }
+      // Sin "advancer": se deduce del marcador publicado (no resuelve empates).
+      if (!m.finished || m.home_score === null || m.away_score === null)
         return null;
       if (m.home_score === m.away_score) return null;
       const homeWon = m.home_score > m.away_score;

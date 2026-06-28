@@ -1,5 +1,5 @@
 import { dbAll, dbGet, getSetting } from "./db.js";
-import { scoreMatch, scoreMatchDrawV2, scoreTournament } from "./scoring.js";
+import { scoreMatch, scoreMatchDrawV2, scoreTournament, scoreAdvance } from "./scoring.js";
 
 export function maskEmail(email: string): string {
   const at = email.indexOf("@");
@@ -35,6 +35,7 @@ interface MatchRow {
   home_score: number | null;
   away_score: number | null;
   finished: number;
+  advancer: string | null;
   status: string | null;
   live_home: number | null;
   live_away: number | null;
@@ -140,6 +141,7 @@ export function shapeMatch(m: MatchRow, teams: TeamMap) {
     homeScore: m.home_score,
     awayScore: m.away_score,
     finished: !!m.finished,
+    advancer: m.advancer ?? null,
     locked: isMatchLocked(m.kickoff_at),
     status: m.status ?? null,
     liveHome: m.live_home ?? null,
@@ -170,6 +172,7 @@ interface PredRow {
   match_id: number;
   home_score: number;
   away_score: number;
+  advances: string | null;
 }
 
 export interface LeaderRow {
@@ -244,6 +247,9 @@ export async function leaderboard(): Promise<LeaderRow[]> {
         );
         matchPoints += pts;
         if (pts === 5) exactCount++;
+        // Bono "quién pasa" (eliminatorias): +1 si acertaste el clasificado.
+        // Independiente del marcador (cuenta aunque falles el resultado de 90/120).
+        matchPoints += scoreAdvance(p.advances, m.advancer);
         continue;
       }
       // puntaje PROVISIONAL si el partido va en vivo (no cuenta como oficial)
