@@ -722,20 +722,28 @@ app.get(
   "/api/admin/backup",
   requireAdmin,
   ah(async (_req, res) => {
-    const [users, matches, predictions, tournamentPicks, settings] = await Promise.all([
-      dbAll("SELECT * FROM users ORDER BY id"),
-      dbAll("SELECT * FROM matches ORDER BY id"),
-      dbAll("SELECT * FROM predictions ORDER BY id"),
-      dbAll("SELECT * FROM tournament_picks ORDER BY user_id"),
-      dbAll("SELECT * FROM settings"),
-    ]);
+    // Respalda TODAS las tablas con datos (las sesiones son efímeras y se omiten).
+    const [users, teams, matches, predictions, tournamentPicks, settings, polls, pollVotes] =
+      await Promise.all([
+        dbAll("SELECT * FROM users ORDER BY id"),
+        dbAll("SELECT * FROM teams ORDER BY id"),
+        dbAll("SELECT * FROM matches ORDER BY id"),
+        dbAll("SELECT * FROM predictions ORDER BY id"),
+        dbAll("SELECT * FROM tournament_picks ORDER BY user_id"),
+        dbAll("SELECT * FROM settings"),
+        dbAll("SELECT * FROM polls ORDER BY sort_order, key"),
+        dbAll("SELECT * FROM poll_votes ORDER BY poll_key, user_id"),
+      ]);
     const backup = {
       exportedAt: new Date().toISOString(),
       users,
+      teams,
       matches,
       predictions,
       tournamentPicks,
       settings,
+      polls,
+      pollVotes,
     };
     res.setHeader("Content-Disposition", `attachment; filename="polla-backup-${new Date().toISOString().slice(0, 10)}.json"`);
     res.setHeader("Content-Type", "application/json");

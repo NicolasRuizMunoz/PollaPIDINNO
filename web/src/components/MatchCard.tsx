@@ -44,21 +44,41 @@ export function MatchCard({
 
   const timer = useRef<number | undefined>(undefined);
   const lastSaved = useRef<string>(myPred ? `${myPred.home}-${myPred.away}` : "");
+  // Último "quién pasa" que autocompletamos nosotros a partir del marcador. Sirve
+  // para distinguir una elección MANUAL del usuario (que respetamos) de una
+  // autocompletada (que podemos actualizar si cambia el marcador). null = manual
+  // o sin autocompletar. Las elecciones ya existentes cuentan como manuales.
+  const autoAdvancer = useRef<string | null>(null);
 
   function scheduleSave(h: string, a: string) {
     if (timer.current) window.clearTimeout(timer.current);
     const hi = parseInt(h, 10);
     const ai = parseInt(a, 10);
     if (!Number.isInteger(hi) || !Number.isInteger(ai) || hi < 0 || ai < 0) return;
-    if (`${hi}-${ai}` === lastSaved.current) return;
+
+    // Ayuda (eliminatorias): un marcador decisivo implica quién pasa. Autocompletamos
+    // al ganador SOLO si el usuario no eligió a mano. En empate se deja libre (penales).
+    // No es determinístico: el usuario puede cambiarlo con los botones.
+    let advToSend: string | null | undefined = undefined;
+    if (isKnockout && hi !== ai) {
+      const winner = hi > ai ? match.home?.id ?? null : match.away?.id ?? null;
+      const isManual = advances != null && advances !== autoAdvancer.current;
+      if (winner && !isManual && advances !== winner) advToSend = winner;
+    }
+
+    if (`${hi}-${ai}` === lastSaved.current && advToSend === undefined) return;
     timer.current = window.setTimeout(async () => {
       setSave("saving");
       setError(null);
       try {
-        await api.savePrediction(match.id, hi, ai);
+        await api.savePrediction(match.id, hi, ai, advToSend);
         lastSaved.current = `${hi}-${ai}`;
+        if (advToSend !== undefined) {
+          autoAdvancer.current = advToSend;
+          setAdvances(advToSend);
+        }
         setSave("saved");
-        onSaved?.(match.id, hi, ai);
+        onSaved?.(match.id, hi, ai, advToSend);
         window.setTimeout(() => setSave("idle"), 1500);
       } catch (e) {
         setSave("error");
@@ -79,6 +99,7 @@ export function MatchCard({
     }
     const next = advances === teamId ? null : teamId; // volver a tocar = quitar
     setAdvances(next);
+    autoAdvancer.current = null; // elección manual: no la pisamos al cambiar el marcador
     setSave("saving");
     setError(null);
     try {

@@ -33,6 +33,7 @@ interface BackupPrediction {
   match_id: number;
   home_score: number;
   away_score: number;
+  advances?: string | null;
   updated_at: string;
 }
 
@@ -52,6 +53,7 @@ interface BackupMatch {
   home_score: number | null;
   away_score: number | null;
   finished: number;
+  advancer?: string | null;
   home_team: string | null;
   away_team: string | null;
   kickoff_at: string;
@@ -63,6 +65,21 @@ interface BackupSetting {
   value: string | null;
 }
 
+interface BackupPoll {
+  key: string;
+  question: string;
+  options: string;
+  results_public?: number;
+  sort_order?: number;
+}
+
+interface BackupPollVote {
+  poll_key: string;
+  user_id: number;
+  choice: string;
+  updated_at?: string;
+}
+
 interface Backup {
   exportedAt: string;
   users: BackupUser[];
@@ -70,6 +87,9 @@ interface Backup {
   tournamentPicks: BackupTournamentPick[];
   matches: BackupMatch[];
   settings: BackupSetting[];
+  // opcionales: pueden faltar en backups antiguos
+  polls?: BackupPoll[];
+  pollVotes?: BackupPollVote[];
 }
 
 async function restore(filePath: string) {
@@ -104,13 +124,14 @@ async function restore(filePath: string) {
   console.log("Restaurando predicciones...");
   for (const p of backup.predictions) {
     await dbRun(
-      `INSERT INTO predictions (user_id, match_id, home_score, away_score, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO predictions (user_id, match_id, home_score, away_score, advances, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, match_id) DO UPDATE SET
          home_score = excluded.home_score,
          away_score = excluded.away_score,
+         advances   = excluded.advances,
          updated_at = excluded.updated_at`,
-      [p.user_id, p.match_id, p.home_score, p.away_score, p.updated_at]
+      [p.user_id, p.match_id, p.home_score, p.away_score, p.advances ?? null, p.updated_at]
     );
   }
   console.log(`  ✓ ${backup.predictions.length} predicciones`);
@@ -150,14 +171,14 @@ async function restore(filePath: string) {
     if (m.home_score === null && m.away_score === null && !m.finished) continue;
     await dbRun(
       `UPDATE matches SET
-         home_score = ?, away_score = ?, finished = ?,
+         home_score = ?, away_score = ?, finished = ?, advancer = ?,
          home_team  = COALESCE(home_team, ?),
          away_team  = COALESCE(away_team, ?),
          kickoff_at = ?,
          venue      = COALESCE(venue, ?)
        WHERE id = ?`,
       [
-        m.home_score, m.away_score, m.finished,
+        m.home_score, m.away_score, m.finished, m.advancer ?? null,
         m.home_team, m.away_team,
         m.kickoff_at,
         m.venue,
@@ -178,6 +199,33 @@ async function restore(filePath: string) {
     );
   }
   console.log(`  ✓ ${backup.settings.length} settings`);
+
+  // Polls y votos de la comunidad (opcionales: pueden faltar en backups antiguos)
+  const polls = backup.polls ?? [];
+  const pollVotes = backup.pollVotes ?? [];
+  if (polls.length) {
+    console.log("Restaurando polls...");
+    for (const p of polls) {
+      await dbRun(
+        `INSERT INTO polls (key, question, options, results_public, sort_order) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET question = excluded.question, options = excluded.options,
+           results_public = excluded.results_public, sort_order = excluded.sort_order`,
+        [p.key, p.question, p.options, p.results_public ?? 0, p.sort_order ?? 0]
+      );
+    }
+    console.log(`  ✓ ${polls.length} polls`);
+  }
+  if (pollVotes.length) {
+    console.log("Restaurando votos de la comunidad...");
+    for (const v of pollVotes) {
+      await dbRun(
+        `INSERT INTO poll_votes (poll_key, user_id, choice, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(poll_key, user_id) DO UPDATE SET choice = excluded.choice, updated_at = excluded.updated_at`,
+        [v.poll_key, v.user_id, v.choice, v.updated_at ?? new Date().toISOString()]
+      );
+    }
+    console.log(`  ✓ ${pollVotes.length} votos`);
+  }
 
   await db.close();
   console.log("\n✅ Restore completado.");

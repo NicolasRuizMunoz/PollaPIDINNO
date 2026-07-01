@@ -282,8 +282,16 @@ function resolveSource(
 /**
  * Rellena los equipos de las eliminatorias segun los resultados PUBLICADOS.
  * Solo asigna 1º/2º cuando el grupo terminó (no se mueve el cuadro oficial con
- * resultados provisionales). force = true limpia primero y recalcula desde cero.
- * Devuelve cuantos cupos quedaron asignados.
+ * resultados provisionales).
+ *
+ * RECONCILIA: si un cupo con "fuente" (WG/RU/TH/T3/WM/LM) resuelve a un equipo
+ * distinto del que tiene hoy, lo ACTUALIZA. Así, corregir un resultado de grupo
+ * (que cambia el 1º/2º/3º) propaga el cambio a las llaves sin apretar nada. Un
+ * cupo cuya fuente aún no resuelve (equipo por definir) se deja intacto, por lo
+ * que los equipos fijados a mano se conservan mientras su fuente no exista.
+ *
+ * force = true limpia primero y recalcula desde cero (borra fijados a mano).
+ * Devuelve cuantos cupos se asignaron o cambiaron.
  */
 export async function resolveBracket(force = false): Promise<number> {
   if (force) {
@@ -311,29 +319,27 @@ export async function resolveBracket(force = false): Promise<number> {
     );
 
     for (const m of matches) {
-      if (!m.home_team) {
-        const r = resolveSource(
-          m.home_src, standings, thirds, matchByCode,
-          (mm, side) => (side === "home" ? mm.home_team : mm.away_team),
-          (grp) => complete.has(grp)
-        );
-        if (r) {
-          await dbRun("UPDATE matches SET home_team = ? WHERE id = ?", [r, m.id]);
-          m.home_team = r;
-          assigned++;
-        }
+      const rh = resolveSource(
+        m.home_src, standings, thirds, matchByCode,
+        (mm, side) => (side === "home" ? mm.home_team : mm.away_team),
+        (grp) => complete.has(grp)
+      );
+      // Actualiza si la fuente resuelve a algo distinto de lo que hay hoy. Si no
+      // resuelve (null) se conserva lo actual (incluye equipos fijados a mano).
+      if (rh && rh !== m.home_team) {
+        await dbRun("UPDATE matches SET home_team = ? WHERE id = ?", [rh, m.id]);
+        m.home_team = rh;
+        assigned++;
       }
-      if (!m.away_team) {
-        const r = resolveSource(
-          m.away_src, standings, thirds, matchByCode,
-          (mm, side) => (side === "home" ? mm.home_team : mm.away_team),
-          (grp) => complete.has(grp)
-        );
-        if (r) {
-          await dbRun("UPDATE matches SET away_team = ? WHERE id = ?", [r, m.id]);
-          m.away_team = r;
-          assigned++;
-        }
+      const ra = resolveSource(
+        m.away_src, standings, thirds, matchByCode,
+        (mm, side) => (side === "home" ? mm.home_team : mm.away_team),
+        (grp) => complete.has(grp)
+      );
+      if (ra && ra !== m.away_team) {
+        await dbRun("UPDATE matches SET away_team = ? WHERE id = ?", [ra, m.id]);
+        m.away_team = ra;
+        assigned++;
       }
     }
   }
