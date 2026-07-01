@@ -120,7 +120,7 @@ const KO_ADMIN: { key: KoFilter; label: string }[] = [
 function AdminResults() {
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [sel, setSel] = useState<string>("A");
+  const [sel, setSel] = useState<string>("elim");
   const [koStage, setKoStage] = useState<KoFilter>("r32");
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -169,14 +169,14 @@ function AdminResults() {
     <div>
       <div className="admin-toolbar">
         <div className="subnav">
+          <button className={sel === "elim" ? "active" : ""} onClick={() => setSel("elim")}>
+            Eliminatorias
+          </button>
           {groups.map((g) => (
             <button key={g} className={sel === g ? "active" : ""} onClick={() => setSel(g)}>
               {g}
             </button>
           ))}
-          <button className={sel === "elim" ? "active" : ""} onClick={() => setSel("elim")}>
-            Eliminatorias
-          </button>
         </div>
         <button className="btn" onClick={recalcular} title="Vuelve a armar las llaves desde los resultados">
           ↻ Recalcular cuadro

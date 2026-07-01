@@ -10,7 +10,7 @@ const STAGE_SHORT: Record<string, string> = {
 };
 
 export function Standings() {
-  const [view, setView] = useState<"grupos" | "elim">("grupos");
+  const [view, setView] = useState<"grupos" | "elim">("elim");
   const [data, setData] = useState<StandingsResponse | null>(null);
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -15,7 +15,7 @@ const KO_SHORT: Record<string, string> = {
 
 export function Fixture() {
   const { data, loading, error, onSaved } = useMatches();
-  const [sel, setSel] = useState<string>("A");
+  const [sel, setSel] = useState<string>("elim");
   const [koStage, setKoStage] = useState<Stage>("r32");
 
   const groups = useMemo(() => {
@@ -54,18 +54,18 @@ export function Fixture() {
   };
 
   return (
-    <div>
+    <div className="fixture compact">
       <h2>Partidos</h2>
 
       <div className="subnav">
-        {groups.map((g) => (
-          <button key={g} className={sel === g ? "active" : ""} onClick={() => setSel(g)}>
-            Grupo {g}
-          </button>
-        ))}
         <button className={sel === "elim" ? "active" : ""} onClick={() => setSel("elim")}>
           Eliminatorias
         </button>
+        {groups.map((g) => (
+          <button key={g} className={sel === g ? "active" : ""} onClick={() => setSel(g)}>
+            {g}
+          </button>
+        ))}
       </div>
 
       {sel !== "elim" ? (

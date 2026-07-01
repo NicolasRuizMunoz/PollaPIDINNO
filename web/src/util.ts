@@ -126,6 +126,52 @@ export function scoreBreakdown(
   return { points: 0, rule: "Sin aciertos → 0" };
 }
 
+/**
+ * Desglose DETALLADO para mostrar junto al resultado real: una parte por cada
+ * concepto que sumó puntos, incluido el bono de "quién pasa" (eliminatorias).
+ *  - Marcador exacto → una sola parte "Resultado exacto +5".
+ *  - Ganador/empate → "Acertaste resultado +3" (+ "Diferencia de gol +1" si aplica).
+ *  - "Quién pasa +1" si acertó el clasificado (independiente del marcador).
+ */
+export interface DetailPart {
+  label: string;
+  points: number;
+}
+
+export function resultDetail(
+  pred: { home: number; away: number } | null,
+  actual: { home: number | null; away: number | null },
+  advances: string | null | undefined,
+  advancer: string | null | undefined,
+  drawRuleV2 = false
+): { total: number; parts: DetailPart[] } {
+  const parts: DetailPart[] = [];
+  if (pred && actual.home !== null && actual.away !== null) {
+    const exact = pred.home === actual.home && pred.away === actual.away;
+    if (exact) {
+      parts.push({ label: "Resultado exacto", points: 5 });
+    } else {
+      const sign = (h: number, a: number) => Math.sign(h - a);
+      if (sign(pred.home, pred.away) === sign(actual.home, actual.away)) {
+        const isDraw = sign(actual.home, actual.away) === 0;
+        parts.push({ label: isDraw ? "Empate acertado" : "Acertaste resultado", points: 3 });
+        if (drawRuleV2 && isDraw) {
+          if (Math.abs(pred.home - actual.home) === 1)
+            parts.push({ label: "A 1 gol del marcador", points: 1 });
+        } else if (pred.home - pred.away === actual.home - actual.away) {
+          parts.push({ label: "Diferencia de gol", points: 1 });
+        }
+      }
+    }
+  }
+  // Bono "quién pasa" (eliminatorias): +1 si acertó el clasificado.
+  if (advancer && advances && advances === advancer) {
+    parts.push({ label: "Quién pasa", points: 1 });
+  }
+  const total = parts.reduce((s, p) => s + p.points, 0);
+  return { total, parts };
+}
+
 /** Solo el numero de puntos. */
 export function scorePrediction(
   pred: { home: number; away: number } | null,

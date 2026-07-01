@@ -18,3 +18,5 @@ build/
 # configuracion local de Claude Code
 .claude/settings.local.json
 web/tsconfig.tsbuildinfo
+
+/backup

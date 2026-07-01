@@ -203,6 +203,25 @@ h3 { margin: 18px 0 8px; font-size: 1.05rem; }
 }
 .match-foot { display: flex; gap: 12px; align-items: center; justify-content: flex-end; margin-top: 8px; }
 
+/* Desglose detallado del puntaje junto al resultado real */
+.score-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.score-detail .pts.pos { white-space: nowrap; }
+.detail-parts { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.detail-part {
+  font-size: 0.74rem; color: var(--muted); background: #f0f2f5;
+  padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+}
+.detail-part b { color: var(--green); }
+
+/* ---------- vista compacta (Partidos): menos scroll ---------- */
+.compact .match { padding: 8px 11px; margin-bottom: 7px; }
+.compact .match-meta { margin-bottom: 5px; }
+.compact .scorebox input { width: 40px; height: 40px; font-size: 1.05rem; }
+.compact .advancer { margin-top: 7px; padding-top: 6px; }
+.compact .match-result { margin-top: 7px; padding-top: 6px; }
+.compact .match-foot { margin-top: 5px; }
+.compact h3 { margin: 12px 0 6px; }
+
 /* ---------- "quién pasa de ronda" (eliminatorias) ---------- */
 .advancer {
   margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line);
@@ -315,9 +334,14 @@ table.standings tr.out td:nth-child(2) { color: var(--muted); }
 .admin-match.finished { border-left: 3px solid var(--green); }
 .admin-match-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
 .admin-match-body { display: grid; grid-template-columns: 1fr auto auto auto 1fr; gap: 6px; align-items: center; }
+/* min-width:0 permite que las columnas 1fr (con <select> adentro) se encojan y no
+   desborden el borde de la tarjeta en móvil. */
+.admin-match-body > * { min-width: 0; }
 .admin-match-body .team-name { font-weight: 600; font-size: 0.88rem; display: flex; align-items: center; gap: 6px; }
 .admin-match-body .team-name:last-child { justify-content: flex-end; text-align: right; }
+.admin-match-body .team-select { flex: 1; min-width: 0; }
 .team-select { padding: 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.82rem; max-width: 100%; }
+.admin-advancer { flex-wrap: wrap; }
 .sc { width: 40px; height: 38px; text-align: center; font-size: 1.05rem; font-weight: 700; border: 2px solid var(--line); border-radius: 8px; }
 .sc::-webkit-outer-spin-button,
 .sc::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -349,6 +373,16 @@ table.standings tr.out td:nth-child(2) { color: var(--muted); }
 
 @media (min-width: 620px) {
   .groups-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* En teléfonos, apretar la fila de admin para que no se salga de los bordes. */
+@media (max-width: 560px) {
+  .admin-match-body { gap: 4px; }
+  .admin-match-body .team-name { font-size: 0.8rem; gap: 4px; }
+  .admin-match-body .team-select { font-size: 0.78rem; padding: 5px 4px; }
+  .sc { width: 34px; height: 34px; font-size: 0.95rem; }
+  .admin-match { padding: 9px 10px; }
+  .kickoff input { max-width: 100%; }
 }
 
 /* ---- votaciones ---- */

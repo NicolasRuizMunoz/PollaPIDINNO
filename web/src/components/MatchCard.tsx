@@ -5,6 +5,7 @@ import {
   hasTeams,
   isLiveMatch,
   liveLabel,
+  resultDetail,
   scoreBreakdown,
   sideName,
 } from "../util";
@@ -118,9 +119,17 @@ export function MatchCard({
   const advancerTeam =
     match.advancer === match.home?.id ? match.home : match.advancer === match.away?.id ? match.away : null;
 
-  const userBreakdown =
+  // Desglose detallado (incluye el bono de "quién pasa") para mostrar junto al
+  // resultado real: acertaste resultado +3, diferencia de gol +1, quién pasa +1…
+  const userDetail =
     match.finished && myPred
-      ? scoreBreakdown(myPred, { home: match.homeScore, away: match.awayScore }, drawRuleActive)
+      ? resultDetail(
+          myPred,
+          { home: match.homeScore, away: match.awayScore },
+          myPred.advances,
+          match.advancer,
+          drawRuleActive
+        )
       : null;
 
   const live = isLiveMatch(match);
@@ -210,9 +219,9 @@ export function MatchCard({
               Pasó: <strong>{advancerTeam.name}</strong>
               {myPred?.advances &&
                 (myPred.advances === match.advancer ? (
-                  <span className="pts"> acertaste +1 ✓</span>
+                  <span className="pts"> ✓</span>
                 ) : (
-                  <span className="pts zero"> +0</span>
+                  <span className="pts zero"> ✗</span>
                 ))}
             </span>
           )}
@@ -239,17 +248,27 @@ export function MatchCard({
 
       {match.finished && (
         <div className="match-result">
-          Resultado real: <strong>{match.homeScore} - {match.awayScore}</strong>
-          {userBreakdown !== null &&
-            (myPred ? (
-              <PointsBadge
-                points={userBreakdown.points}
-                rule={userBreakdown.rule}
-                label={`ganaste ${userBreakdown.points} pts`}
-              />
+          <span>Resultado real: <strong>{match.homeScore} - {match.awayScore}</strong></span>
+          {userDetail !== null ? (
+            userDetail.parts.length > 0 ? (
+              <span className="score-detail">
+                <strong className="pts pos">
+                  Ganaste {userDetail.total} {userDetail.total === 1 ? "pt" : "pts"}
+                </strong>
+                <span className="detail-parts">
+                  {userDetail.parts.map((p, i) => (
+                    <span key={i} className="detail-part">
+                      {p.label} <b>+{p.points}</b>
+                    </span>
+                  ))}
+                </span>
+              </span>
             ) : (
-              <span className="pts zero">no jugaste</span>
-            ))}
+              <span className="pts zero">No sumaste (+0)</span>
+            )
+          ) : (
+            <span className="pts zero">no jugaste</span>
+          )}
         </div>
       )}
 
