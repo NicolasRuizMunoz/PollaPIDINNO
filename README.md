@@ -22,6 +22,8 @@ todos los partidos y los bonos del torneo; gana quien acumule más puntos.
 | …y además la diferencia de goles (3-1 y queda 4-2) | **+1** (→ 4) |
 | Nada | 0 |
 
+A
+
 **Bonos del torneo** (se eligen antes): **campeón = 15 pts**; subcampeón, goleador,
 mejor arquero, mejor jugador y mejor jugador joven = **10 pts** c/u.
 
