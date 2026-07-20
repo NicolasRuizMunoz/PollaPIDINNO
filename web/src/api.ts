@@ -220,6 +220,61 @@ export interface AdminPollsResponse {
   polls: AdminPoll[];
 }
 
+// ---- wrapped ----
+
+export interface RankingItem {
+  position: number;
+  apodo: string;
+  value: number | string;
+  isMe?: boolean;
+}
+
+export interface GlobalAward {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  ranking: RankingItem[];
+}
+
+export interface StatCategory<T> {
+  name: string;
+  value: T;
+  position: number;
+  total: number;
+  description?: string;
+}
+
+export interface EvolutionEntry {
+  jornada: number;
+  date: string;
+  stage: string;
+  position: number;
+  points: number;
+}
+
+export interface WrappedStats {
+  bestDay: StatCategory<{ date: string; points: number; description: string }>;
+  worstDay: StatCategory<{ date: string; points: number; description: string }>;
+  longestWinStreak: StatCategory<{ count: number }>;
+  longestLossStreak: StatCategory<{ count: number }>;
+  exactPercentage: StatCategory<{ exact: number; partial: number; percentage: number }>;
+  luckyTeam: StatCategory<{ name: string; points: number }> | null;
+  cursedTeam: StatCategory<{ name: string; points: number }> | null;
+  draws: StatCategory<{ predicted: number; actual: number }>;
+  favoriteScore: StatCategory<{ score: string; count: number }>;
+  gloryMatch: StatCategory<{ match: string; prediction: string }> | null;
+  position: number;
+  totalPoints: number;
+  awards: {
+    id: string;
+    name: string;
+    emoji: string;
+    description: string;
+  }[];
+  globalAwards: GlobalAward[];
+}
+
 // ---- sesion ----
 
 export function getToken(): string | null {
@@ -265,6 +320,46 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ---- endpoints ----
 
+// Timeline data structures
+export interface TimelineMatch {
+  id: number;
+  kickoffAt: string;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  homeLabel: string | null;
+  awayLabel: string | null;
+  finished: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
+  stage: string;
+  grp: string | null;
+}
+
+export interface TimelineUser {
+  id: number;
+  apodo: string;
+  email: string;
+}
+
+export interface TimelinePrediction {
+  userId: number;
+  matchId: number;
+  homeScore: number;
+  awayScore: number;
+}
+
+export interface TimelineTeam {
+  id: string;
+  grp: string | null;
+}
+
+export interface LeaderboardTimelineData {
+  users: TimelineUser[];
+  matches: TimelineMatch[];
+  teams: TimelineTeam[];
+  predictions: TimelinePrediction[];
+}
+
 export const api = {
   config: () => req<{ googleClientId: string | null; devLogin: boolean }>("/config"),
 
@@ -294,6 +389,10 @@ export const api = {
 
   myMatches: () => req<MyMatchesResponse>("/me/predictions"),
 
+  wrapped: () => req<WrappedStats>("/me/wrapped"),
+
+  evolution: () => req<EvolutionEntry[]>("/me/evolution"),
+
   // `advances` (eliminatorias): undefined = no tocar; null = borrar; id = fijar.
   savePrediction: (matchId: number, home: number, away: number, advances?: string | null) =>
     req<{ home: number; away: number; advances?: string | null }>(`/predictions/${matchId}`, {
@@ -305,6 +404,8 @@ export const api = {
     req<MatchPredictions>(`/matches/${matchId}/predictions`),
 
   leaderboard: () => req<LeaderRow[]>("/leaderboard"),
+
+  leaderboardTimeline: () => req<LeaderboardTimelineData>("/leaderboard/timeline"),
 
   reglaEmpate: () => req<DrawRulePreview>("/regla-empate"),
 

@@ -301,6 +301,85 @@ export async function leaderboard(): Promise<LeaderRow[]> {
   return rows;
 }
 
+export interface TimelineMatch {
+  id: number;
+  kickoffAt: string;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  homeLabel: string | null;
+  awayLabel: string | null;
+  finished: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
+  stage: string;
+  grp: string | null;
+}
+
+export interface TimelineUser {
+  id: number;
+  apodo: string;
+  email: string;
+}
+
+export interface TimelinePrediction {
+  userId: number;
+  matchId: number;
+  homeScore: number;
+  awayScore: number;
+}
+
+export interface TimelineTeam {
+  id: string;
+  grp: string | null;
+}
+
+export interface LeaderboardTimelineData {
+  users: TimelineUser[];
+  matches: TimelineMatch[];
+  teams: TimelineTeam[];
+  predictions: TimelinePrediction[];
+}
+
+/** Devuelve todos los datos necesarios para calcular el leaderboard histórico en el navegador. */
+export async function leaderboardTimeline(): Promise<LeaderboardTimelineData> {
+  const users = await dbAll<{ id: number; apodo: string; email: string }>(
+    "SELECT id, apodo, email FROM users WHERE is_active = 1 ORDER BY id"
+  );
+
+  const matches = await dbAll<MatchRow>("SELECT * FROM matches ORDER BY kickoff_at, id");
+  const matchesOut = matches.map((m) => ({
+    id: m.id,
+    kickoffAt: m.kickoff_at,
+    homeTeam: m.home_team ?? null,
+    awayTeam: m.away_team ?? null,
+    homeLabel: m.home_label ?? null,
+    awayLabel: m.away_label ?? null,
+    finished: !!m.finished,
+    homeScore: m.home_score ?? null,
+    awayScore: m.away_score ?? null,
+    stage: m.stage,
+    grp: m.grp ?? null,
+  }));
+
+  const teams = await dbAll<TeamRow>("SELECT id, grp FROM teams");
+  const teamsOut = teams.map((t) => ({ id: t.id, grp: t.grp ?? null }));
+
+  const predictions = await dbAll<PredRow>("SELECT * FROM predictions");
+  const predictionsOut = predictions.map((p) => ({
+    userId: p.user_id,
+    matchId: p.match_id,
+    homeScore: p.home_score,
+    awayScore: p.away_score,
+  }));
+
+  return {
+    users: users.map((u) => ({ id: u.id, apodo: displayName(u.apodo, u.email), email: u.email })),
+    matches: matchesOut,
+    teams: teamsOut,
+    predictions: predictionsOut,
+  };
+}
+
 // ----------------------------------------------------------------------------
 // Vista previa del cambio de regla del EMPATE (propuesta, aún NO aplicada).
 // Compara el puntaje actual (scoreMatch) con el de la regla nueva
@@ -480,4 +559,460 @@ export async function drawRulePreview(): Promise<DrawRulePreview> {
     affectedCount: affected.length,
     pointsRemoved,
   };
+}
+
+// -------- wrapped --------
+
+export interface RankingItem {
+  position: number;
+  apodo: string;
+  value: number | string;
+  isMe?: boolean;
+}
+
+export interface GlobalAward {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  ranking: RankingItem[];
+}
+
+export interface StatCategory<T> {
+  name: string;
+  value: T;
+  position: number;
+  total: number;
+  description?: string;
+}
+
+export interface WrappedStats {
+  bestDay: StatCategory<{ date: string; points: number; description: string }>;
+  worstDay: StatCategory<{ date: string; points: number; description: string }>;
+  longestWinStreak: StatCategory<{ count: number }>;
+  longestLossStreak: StatCategory<{ count: number }>;
+  exactPercentage: StatCategory<{ exact: number; partial: number; percentage: number }>;
+  luckyTeam: StatCategory<{ name: string; points: number }> | null;
+  cursedTeam: StatCategory<{ name: string; points: number }> | null;
+  draws: StatCategory<{ predicted: number; actual: number }>;
+  favoriteScore: StatCategory<{ score: string; count: number }>;
+  gloryMatch: StatCategory<{ match: string; prediction: string }> | null;
+  position: number;
+  totalPoints: number;
+  awards: {
+    id: string;
+    name: string;
+    emoji: string;
+    description: string;
+  }[];
+  globalAwards: GlobalAward[];
+}
+
+export async function calculateWrapped(userId: number): Promise<WrappedStats | null> {
+  const teams = await loadTeamMap();
+  const score = await activeScorer();
+
+  // obtener todas las predicciones del usuario con sus matches
+  const rows = await dbAll<Record<string, unknown>>(
+    `SELECT m.*, p.home_score AS p_home, p.away_score AS p_away, p.advances AS p_advances
+     FROM predictions p
+     JOIN matches m ON m.id = p.match_id
+     WHERE p.user_id = ? AND m.finished = 1 AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+     ORDER BY m.kickoff_at, m.id`,
+    [userId]
+  );
+
+  if (rows.length === 0) return null;
+
+  const matches = rows.map((r) => {
+    const shaped = shapeMatch(r as never, teams);
+    const pred = { home: Number(r.p_home), away: Number(r.p_away) };
+    const pts = score(pred, { home: shaped.homeScore!, away: shaped.awayScore! });
+    return { shaped, pred, pts, home_team: (r.home_team as string | null), away_team: (r.away_team as string | null) };
+  });
+
+  // estadísticas por día
+  const pointsByDay = new Map<string, number>();
+  const dayOrder: string[] = [];
+  for (const m of matches) {
+    const date = m.shaped.kickoffAt.split("T")[0];
+    if (!dayOrder.includes(date)) dayOrder.push(date);
+    pointsByDay.set(date, (pointsByDay.get(date) ?? 0) + m.pts);
+  }
+  const daysArray = Array.from(pointsByDay.entries()).sort((a, b) => b[1] - a[1]);
+  const bestDay = daysArray[0] || ["", 0];
+  const worstDay = daysArray[daysArray.length - 1] || ["", 0];
+
+  // Mapear fechas a números de jornada
+  const dateToJornada = new Map<string, number>();
+  dayOrder.forEach((date, idx) => dateToJornada.set(date, idx + 1));
+
+  // Función para describir la etapa de un match
+  const stageNames: Record<string, string> = {
+    group: "Fase de Grupos",
+    r32: "32avos de Final",
+    r16: "16avos de Final",
+    qf: "Cuartos de Final",
+    sf: "Semifinal",
+    third: "Tercer Puesto",
+    final: "Final",
+  };
+
+  const getStageDescription = (m: (typeof matches)[0]): string => {
+    const stage = stageNames[m.shaped.stage] || m.shaped.stage;
+    if (m.shaped.stage === "group" && m.shaped.grp) {
+      // Contar cuál es el partido N dentro del grupo
+      const groupMatches = matches.filter(
+        (x) => x.shaped.stage === "group" && x.shaped.grp === m.shaped.grp
+      );
+      const matchIndex = groupMatches.findIndex((x) => x.shaped.id === m.shaped.id) + 1;
+      const jornadas = ["1°", "2°", "3°"];
+      return `${stage}, Jornada ${jornadas[matchIndex - 1] || matchIndex}`;
+    }
+    return stage;
+  };
+
+  // rachas
+  let maxWinStreak = 0,
+    currentWinStreak = 0;
+  let maxLossStreak = 0,
+    currentLossStreak = 0;
+  for (const m of matches) {
+    if (m.pts === 5) {
+      currentWinStreak++;
+      maxWinStreak = Math.max(maxWinStreak, currentWinStreak);
+      currentLossStreak = 0;
+    } else {
+      currentLossStreak++;
+      maxLossStreak = Math.max(maxLossStreak, currentLossStreak);
+      currentWinStreak = 0;
+    }
+  }
+
+  // porcentaje exactos
+  const exactCount = matches.filter((m) => m.pts === 5).length;
+  const partialCount = matches.filter((m) => m.pts === 3 || m.pts === 4).length;
+  const exactPercentage = ((exactCount / matches.length) * 100).toFixed(1);
+
+  // equipo amuleto y maldito: contar los equipos en los que aparecían en las predicciones
+  const pointsByTeam = new Map<string, { name: string; points: number; count: number }>();
+  for (const m of matches) {
+    for (const teamId of [m.home_team, m.away_team]) {
+      if (!teamId) continue;
+      const team = teams.get(teamId);
+      if (!team) continue;
+      const current = pointsByTeam.get(teamId) ?? { name: team.name, points: 0, count: 0 };
+      current.points += m.pts;
+      current.count++;
+      pointsByTeam.set(teamId, current);
+    }
+  }
+  const teamsArray = Array.from(pointsByTeam.values()).filter((t) => t.count >= 2);
+  const luckyTeam = teamsArray.sort((a, b) => b.points / b.count - a.points / a.count)[0];
+  const cursedTeam = teamsArray.sort((a, b) => a.points / a.count - b.points / b.count)[0];
+
+  // empates
+  let predictedDraws = 0,
+    actualDraws = 0;
+  for (const m of matches) {
+    if (m.pred.home === m.pred.away) predictedDraws++;
+    if (m.shaped.homeScore === m.shaped.awayScore) actualDraws++;
+  }
+
+  // marcador favorito
+  const scoreFreq = new Map<string, number>();
+  for (const m of matches) {
+    const key = `${m.pred.home}-${m.pred.away}`;
+    scoreFreq.set(key, (scoreFreq.get(key) ?? 0) + 1);
+  }
+  const favoriteScore = Array.from(scoreFreq.entries()).sort((a, b) => b[1] - a[1])[0];
+
+  // partido de gloria: donde fue único en acertar
+  let gloryMatch: { match: string; prediction: string } | null = null;
+  for (const m of matches) {
+    if (m.pts === 5) {
+      const allPreds = await dbAll<{ count: number }>(
+        `SELECT COUNT(*) as count FROM predictions p
+         JOIN matches m2 ON m2.id = p.match_id
+         WHERE p.match_id = ? AND m2.finished = 1
+           AND p.home_score = ? AND p.away_score = ?`,
+        [m.shaped.id, m.shaped.homeScore, m.shaped.awayScore]
+      );
+      if (allPreds[0]?.count === 1) {
+        gloryMatch = {
+          match: `${m.shaped.home?.name || m.shaped.homeLabel} vs ${m.shaped.away?.name || m.shaped.awayLabel}`,
+          prediction: `${m.pred.home}-${m.pred.away}`,
+        };
+        break;
+      }
+    }
+  }
+
+  // posición en leaderboard
+  const leaders = await leaderboard();
+  const myPos = leaders.findIndex((l) => l.userId === userId) + 1;
+  const totalPoints = leaders.find((l) => l.userId === userId)?.total ?? 0;
+
+  // awards (premios)
+  const awards: WrappedStats["awards"] = [];
+
+  // El Oráculo: top 3 en exactos
+  const exactRanking = leaders.sort((a, b) => b.exactCount - a.exactCount);
+  if (exactRanking.slice(0, 3).some((l) => l.userId === userId)) {
+    awards.push({
+      id: "oraculo",
+      name: "El Oráculo",
+      emoji: "🏆",
+      description: "Entre los 3 con más marcadores exactos",
+    });
+  }
+
+  // La Moneda: ~50% acierto
+  if (Math.abs(parseFloat(exactPercentage) - 50) < 5) {
+    awards.push({
+      id: "moneda",
+      name: "La Moneda",
+      emoji: "🪙",
+      description: "Sus aciertos parecen al azar (~50%)",
+    });
+  }
+
+  // El Constante: nunca fue primero pero nunca último
+  if (myPos > 1 && myPos < leaders.length) {
+    awards.push({
+      id: "constante",
+      name: "El Constante",
+      emoji: "🐢",
+      description: "Nunca fue primero pero nunca fue último",
+    });
+  }
+
+  // El Optimista: goleadas predichas
+  const goleadas = matches.filter((m) => m.pred.home >= 3 || m.pred.away >= 3).length;
+  if (goleadas >= matches.length * 0.3) {
+    awards.push({
+      id: "optimista",
+      name: "El Optimista",
+      emoji: "📉",
+      description: "Siempre apostó a goleadas que nunca pasaron",
+    });
+  }
+
+  // Crear premios globales para cada categoría
+  const globalAwards: GlobalAward[] = [
+    {
+      id: "exactos",
+      name: "🎯 Más exactos",
+      emoji: "🎯",
+      description: "Quien más marcadores exactos acertó",
+      ranking: leaders
+        .map((l, idx) => ({
+          position: idx + 1,
+          apodo: l.apodo,
+          value: l.exactCount,
+          isMe: l.userId === userId,
+        }))
+        .slice(0, 4),
+    },
+  ];
+
+  const bestJornada = dateToJornada.get(bestDay[0]) ?? 0;
+  const worstJornada = dateToJornada.get(worstDay[0]) ?? 0;
+
+  // Obtener descripción de etapa para mejor y peor día
+  const getBestDayStage = () => {
+    const m = matches.find((x) => x.shaped.kickoffAt.split("T")[0] === bestDay[0]);
+    return m ? getStageDescription(m) : "Jornada";
+  };
+  const getWorstDayStage = () => {
+    const m = matches.find((x) => x.shaped.kickoffAt.split("T")[0] === worstDay[0]);
+    return m ? getStageDescription(m) : "Jornada";
+  };
+
+  return {
+    bestDay: {
+      name: "Mejor jornada",
+      value: { date: bestDay[0], points: bestDay[1], description: `Jornada ${bestJornada}` },
+      position: 1,
+      total: daysArray.length,
+      description: `${getBestDayStage()}: ${bestDay[1]} puntos`,
+    },
+    worstDay: {
+      name: "Peor jornada",
+      value: { date: worstDay[0], points: worstDay[1], description: `Jornada ${worstJornada}` },
+      position: daysArray.length,
+      total: daysArray.length,
+      description: `${getWorstDayStage()}: ${worstDay[1]} puntos`,
+    },
+    longestWinStreak: {
+      name: "Racha ganadora",
+      value: { count: maxWinStreak },
+      position: 1,
+      total: 1,
+      description: `${maxWinStreak} aciertos exactos seguidos`,
+    },
+    longestLossStreak: {
+      name: "Racha perdedora",
+      value: { count: maxLossStreak },
+      position: 1,
+      total: 1,
+      description: `${maxLossStreak} errores sin acertar exacto`,
+    },
+    exactPercentage: {
+      name: "Exactitud",
+      value: { exact: exactCount, partial: partialCount, percentage: parseFloat(exactPercentage) },
+      position: 1,
+      total: 1,
+      description: `${exactCount} exactos, ${partialCount} parciales (${exactPercentage}% exactitud)`,
+    },
+    luckyTeam: luckyTeam
+      ? {
+          name: "Equipo amuleto",
+          value: { name: luckyTeam.name, points: luckyTeam.points },
+          position: 1,
+          total: 1,
+          description: `${luckyTeam.name}: ${(luckyTeam.points / luckyTeam.count).toFixed(1)} pts/partido`,
+        }
+      : null,
+    cursedTeam: cursedTeam
+      ? {
+          name: "Equipo maldito",
+          value: { name: cursedTeam.name, points: cursedTeam.points },
+          position: 1,
+          total: 1,
+          description: `${cursedTeam.name}: ${(cursedTeam.points / cursedTeam.count).toFixed(1)} pts/partido`,
+        }
+      : null,
+    draws: {
+      name: "Empates",
+      value: { predicted: predictedDraws, actual: actualDraws },
+      position: 1,
+      total: 1,
+      description: `Predijiste ${predictedDraws} empates, hubo ${actualDraws}`,
+    },
+    favoriteScore: favoriteScore
+      ? {
+          name: "Marcador favorito",
+          value: { score: favoriteScore[0], count: favoriteScore[1] },
+          position: 1,
+          total: 1,
+          description: `${favoriteScore[0]} (${favoriteScore[1]} veces)`,
+        }
+      : {
+          name: "Marcador favorito",
+          value: { score: "N/A", count: 0 },
+          position: 1,
+          total: 1,
+          description: "Sin datos",
+        },
+    gloryMatch: gloryMatch
+      ? {
+          name: "Momento de gloria",
+          value: gloryMatch,
+          position: 1,
+          total: 1,
+          description: `Fuiste el único en acertar ${gloryMatch.prediction}`,
+        }
+      : null,
+    position: myPos,
+    totalPoints,
+    awards,
+    globalAwards,
+  };
+}
+
+export async function getEvolution(userId: number): Promise<Array<{ jornada: number; date: string; stage: string; position: number; points: number }> | null> {
+  const teams = await loadTeamMap();
+  const score = await activeScorer();
+
+  const rows = await dbAll<Record<string, unknown>>(
+    `SELECT m.*, p.home_score AS p_home, p.away_score AS p_away
+     FROM predictions p
+     JOIN matches m ON m.id = p.match_id
+     WHERE p.user_id = ? AND m.finished = 1 AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+     ORDER BY m.kickoff_at, m.id`,
+    [userId]
+  );
+
+  if (rows.length === 0) return null;
+
+  // Obtener todas las predicciones de todos los usuarios
+  const allPreds = await dbAll<Record<string, unknown>>(
+    `SELECT p.user_id, p.home_score AS p_home, p.away_score AS p_away, m.id as match_id, m.finished, m.home_score, m.away_score, m.kickoff_at
+     FROM predictions p
+     JOIN matches m ON m.id = p.match_id
+     WHERE m.finished = 1 AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+     ORDER BY m.kickoff_at, m.id`
+  );
+
+  // Agrupar predicciones por fecha
+  const dateOrder: string[] = [];
+  const matchesByDate = new Map<string, Record<string, unknown>[]>();
+  for (const p of allPreds) {
+    const date = (p.kickoff_at as string).split("T")[0];
+    if (!dateOrder.includes(date)) dateOrder.push(date);
+    if (!matchesByDate.has(date)) matchesByDate.set(date, []);
+    matchesByDate.get(date)!.push(p);
+  }
+
+  // Calcular evolución por jornada
+  const evolution: Array<{ jornada: number; date: string; stage: string; position: number; points: number }> = [];
+  let cumulativePoints = new Map<number, number>();
+
+  for (let i = 0; i < dateOrder.length; i++) {
+    const date = dateOrder[i];
+    const jornada = i + 1;
+    const matchesOnDate = matchesByDate.get(date) || [];
+
+    // Calcular puntos de esta jornada
+    for (const p of matchesOnDate) {
+      const pred = { home: Number(p.p_home), away: Number(p.p_away) };
+      const pts = score(pred, { home: Number(p.home_score), away: Number(p.away_score) });
+      const uid = Number(p.user_id);
+      cumulativePoints.set(uid, (cumulativePoints.get(uid) ?? 0) + pts);
+    }
+
+    // Calcular posición del usuario en esta jornada
+    const ranking = Array.from(cumulativePoints.entries())
+      .map(([id, pts]) => ({ id, pts }))
+      .sort((a, b) => b.pts - a.pts);
+    const userRank = ranking.findIndex((r) => r.id === userId) + 1;
+    const userPoints = cumulativePoints.get(userId) ?? 0;
+
+    // Obtener stage description de algún match de esta fecha
+    const sampleMatch = rows.find((r) => (r.kickoff_at as string).split("T")[0] === date);
+    let stage = "Jornada";
+    if (sampleMatch) {
+      const shaped = shapeMatch(sampleMatch as never, teams);
+      const stageNames: Record<string, string> = {
+        group: "Fase de Grupos",
+        r32: "32avos de Final",
+        r16: "16avos de Final",
+        qf: "Cuartos de Final",
+        sf: "Semifinal",
+        third: "Tercer Puesto",
+        final: "Final",
+      };
+      stage = stageNames[shaped.stage] || shaped.stage;
+      if (shaped.stage === "group" && shaped.grp) {
+        const groupMatches = rows.filter((x) => {
+          const xshaped = shapeMatch(x as never, teams);
+          return xshaped.stage === "group" && xshaped.grp === shaped.grp;
+        });
+        const matchIndex = groupMatches.findIndex((x) => (x.kickoff_at as string).split("T")[0] === date) + 1;
+        const jornadas = ["1°", "2°", "3°"];
+        stage = `${stage}, Jornada ${jornadas[matchIndex - 1] || matchIndex}`;
+      }
+    }
+
+    evolution.push({
+      jornada,
+      date,
+      stage,
+      position: userRank,
+      points: userPoints,
+    });
+  }
+
+  return evolution;
 }

@@ -23,12 +23,15 @@ import {
   areBonosLocked,
   bonosDeadline,
   leaderboard,
+  leaderboardTimeline,
   drawRulePreview,
   drawRuleActive,
   activeScorer,
   displayName,
   pollsDeadline,
   arePollsLocked,
+  calculateWrapped,
+  getEvolution,
 } from "./queries.js";
 import { groupStandings, bestThirds, eliminatedTeams, resolveBracket } from "./advancement.js";
 import { scoreAdvance } from "./scoring.js";
@@ -314,6 +317,24 @@ app.get(
   })
 );
 
+app.get(
+  "/api/me/wrapped",
+  requireAuth,
+  ah(async (req: AuthedRequest, res) => {
+    const wrapped = await calculateWrapped(req.user!.id);
+    ok(res, wrapped ?? { error: "No hay datos suficientes para el wrapped" });
+  })
+);
+
+app.get(
+  "/api/me/evolution",
+  requireAuth,
+  ah(async (req: AuthedRequest, res) => {
+    const evolution = await getEvolution(req.user!.id);
+    ok(res, evolution ?? { error: "No hay datos suficientes para la evolución" });
+  })
+);
+
 // ---------------------------------------------------------------- bonos
 
 app.get(
@@ -495,6 +516,13 @@ app.get(
   "/api/leaderboard",
   ah(async (_req, res) => {
     ok(res, await leaderboard());
+  })
+);
+
+app.get(
+  "/api/leaderboard/timeline",
+  ah(async (_req, res) => {
+    ok(res, await leaderboardTimeline());
   })
 );
 
@@ -748,6 +776,35 @@ app.get(
     res.setHeader("Content-Disposition", `attachment; filename="polla-backup-${new Date().toISOString().slice(0, 10)}.json"`);
     res.setHeader("Content-Type", "application/json");
     res.send(JSON.stringify(backup, null, 2));
+  })
+);
+
+// ---------------------------------------------------------------- admin: debug bonos
+
+app.get(
+  "/api/admin/bonos-debug",
+  requireAdmin,
+  ah(async (_req, res) => {
+    const rows = await dbAll<{
+      id: number;
+      apodo: string;
+      email: string;
+      champion: string | null;
+      runner_up: string | null;
+      top_scorer: string | null;
+      best_goalkeeper: string | null;
+      best_player: string | null;
+      best_young_player: string | null;
+    }>(
+      `SELECT u.id, u.apodo, u.email,
+              tp.champion, tp.runner_up, tp.top_scorer,
+              tp.best_goalkeeper, tp.best_player, tp.best_young_player
+       FROM users u
+       LEFT JOIN tournament_picks tp ON u.id = tp.user_id
+       WHERE u.is_active = 1
+       ORDER BY u.id`
+    );
+    ok(res, rows);
   })
 );
 

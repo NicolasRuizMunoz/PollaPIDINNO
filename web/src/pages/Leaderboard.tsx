@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, getUser, type LeaderRow } from "../api";
+import { LeaderboardTimeline } from "./LeaderboardTimeline";
 
 export function Leaderboard() {
   const [rows, setRows] = useState<LeaderRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"normal" | "timeline">("normal");
   const me = getUser();
 
   useEffect(() => {
@@ -22,11 +24,27 @@ export function Leaderboard() {
   }, [anyLive]);
 
   if (error) return <p className="err center">{error}</p>;
+
+  if (mode === "timeline") {
+    return (
+      <div>
+        <div className="mode-switcher">
+          <button onClick={() => setMode("normal")}>← Volver</button>
+          <h2>Evolución temporal</h2>
+        </div>
+        <LeaderboardTimeline />
+      </div>
+    );
+  }
+
   if (!rows) return <p className="muted center">cargando tabla…</p>;
 
   return (
     <div>
-      <h2>Tabla de posiciones</h2>
+      <div className="table-header">
+        <h2>Tabla de posiciones</h2>
+        <button className="timeline-btn" onClick={() => setMode("timeline")}>⏱️ Evolución</button>
+      </div>
       {anyLive && (
         <p className="muted small">
           🔴 Incluye puntos <strong>provisionales</strong> de partidos en curso o aún sin

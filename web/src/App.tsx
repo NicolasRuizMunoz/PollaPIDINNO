@@ -15,12 +15,16 @@ import { Standings } from "./pages/Standings";
 import { Leaderboard } from "./pages/Leaderboard";
 import { MisPartidos } from "./pages/MisPartidos";
 import { Bonos } from "./pages/Bonos";
+import { Wrapped } from "./pages/Wrapped";
+import { Evolution } from "./pages/Evolution";
 import { Admin } from "./pages/Admin";
 
-type Tab = "hoy" | "partidos" | "bonos" | "posiciones" | "tabla" | "mis" | "admin";
+type Tab = "hoy" | "partidos" | "bonos" | "posiciones" | "tabla" | "mis" | "wrapped" | "evolucion" | "admin";
 
 const TABS: { id: Tab; label: string; adminOnly?: boolean }[] = [
   { id: "hoy", label: "Hoy" },
+  { id: "wrapped", label: "Wrapped" },
+  { id: "evolucion", label: "Evolución" },
   { id: "partidos", label: "Partidos" },
   { id: "bonos", label: "Bonos" },
   { id: "posiciones", label: "Posiciones" },
@@ -124,6 +128,8 @@ export function App() {
         {tab === "posiciones" && <Standings />}
         {tab === "tabla" && <Leaderboard />}
         {tab === "mis" && <MisPartidos />}
+        {tab === "wrapped" && <Wrapped onNavigate={setTab} />}
+        {tab === "evolucion" && <Evolution />}
         {tab === "admin" && user.isAdmin && <Admin />}
       </main>
 
