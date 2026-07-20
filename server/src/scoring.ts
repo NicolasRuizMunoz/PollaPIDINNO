@@ -158,6 +158,52 @@ function sameText(a?: string | null, b?: string | null): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+// Mapeo de variantes a valor normalizado
+const normalizationMaps = {
+  topScorer: new Map([
+    ["mbappe", "MBAPPE"], ["Mbappe", "MBAPPE"], ["MBAPPE", "MBAPPE"],
+    ["mbappé", "MBAPPE"], ["Mbappé", "MBAPPE"],
+    ["kylian mbappe", "MBAPPE"], ["Kylian Mbappe", "MBAPPE"],
+    ["kylian mbappé", "MBAPPE"], ["Kylian Mbappé", "MBAPPE"],
+    ["kylian mbapeé", "MBAPPE"], ["Kylian Mbapeé", "MBAPPE"],
+    ["killyan mbappe", "MBAPPE"], ["Mbape", "MBAPPE"], ["mbape", "MBAPPE"],
+    ["messi", "MESSI"], ["Messi", "MESSI"], ["MESSI", "MESSI"],
+    ["lionel messi", "MESSI"], ["Lionel Messi", "MESSI"],
+    ["harry kane", "KANE"], ["Harry Kane", "KANE"],
+  ]),
+  bestGoalkeeper: new Map([
+    ["dibu", "SIMON"], ["Dibu", "SIMON"],
+    ["dibu martinez", "SIMON"], ["Dibu martinez", "SIMON"],
+    ["emiliano dibu martinez", "SIMON"], ["Emiliano Dibu Martinez", "SIMON"],
+    ["emiliano martínez", "SIMON"], ["Emiliano Martínez", "SIMON"],
+    ["unai simón", "SIMON"], ["Unai Simón", "SIMON"],
+    ["unai simon", "SIMON"], ["Unai Simon", "SIMON"], ["SIMON", "SIMON"],
+  ]),
+  bestPlayer: new Map([
+    ["mbappe", "MBAPPE"], ["Mbappe", "MBAPPE"],
+    ["kylian mbappe", "MBAPPE"], ["Kylian Mbappe", "MBAPPE"],
+    ["kylian mbappé", "MBAPPE"], ["Kylian Mbappé", "MBAPPE"],
+    ["kylian mbapeé", "MBAPPE"], ["Kylian Mbapeé", "MBAPPE"],
+    ["messi", "MESSI"], ["Messi", "MESSI"],
+    ["lionel messi", "MESSI"], ["Lionel Messi", "MESSI"],
+    ["rodri", "RODRI"], ["Rodri", "RODRI"],
+  ]),
+  bestYoungPlayer: new Map([
+    ["lamine yamal", "CUBARSI"], ["Lamine Yamal", "CUBARSI"],
+    ["lamine yamal", "CUBARSI"], ["Lamine yamal", "CUBARSI"],
+    ["lamine", "CUBARSI"], ["Lamine", "CUBARSI"],
+    ["yamal", "CUBARSI"], ["Yamal", "CUBARSI"],
+    ["pau cubarsi", "CUBARSI"], ["Pau Cubarsi", "CUBARSI"],
+  ]),
+};
+
+function normalize(field: "topScorer" | "bestGoalkeeper" | "bestPlayer" | "bestYoungPlayer", value: string | null | undefined): string | null {
+  if (!value) return null;
+  const map = normalizationMaps[field];
+  if (!map) return value?.trim().toUpperCase() ?? null;
+  return map.get(value.trim()) ?? value.trim().toUpperCase();
+}
+
 /** Puntos de los bonos de torneo (10 por cada acierto). */
 export function scoreTournament(
   picks: TournamentPicks | null,
@@ -171,16 +217,17 @@ export function scoreTournament(
   if (picks.runnerUp && results.runnerUp && picks.runnerUp === results.runnerUp) {
     points += POINTS.TOURNAMENT_BONUS;
   }
-  if (sameText(picks.topScorer, results.topScorer)) {
+  // Comparar normalizando
+  if (normalize("topScorer", picks.topScorer) === results.topScorer) {
     points += POINTS.TOURNAMENT_BONUS;
   }
-  if (sameText(picks.bestGoalkeeper, results.bestGoalkeeper)) {
+  if (normalize("bestGoalkeeper", picks.bestGoalkeeper) === results.bestGoalkeeper) {
     points += POINTS.TOURNAMENT_BONUS;
   }
-  if (sameText(picks.bestPlayer, results.bestPlayer)) {
+  if (normalize("bestPlayer", picks.bestPlayer) === results.bestPlayer) {
     points += POINTS.TOURNAMENT_BONUS;
   }
-  if (sameText(picks.bestYoungPlayer, results.bestYoungPlayer)) {
+  if (normalize("bestYoungPlayer", picks.bestYoungPlayer) === results.bestYoungPlayer) {
     points += POINTS.TOURNAMENT_BONUS;
   }
   return points;

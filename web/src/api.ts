@@ -179,6 +179,25 @@ export interface TournamentInfo {
   } | null;
 }
 
+export interface BonusPrediction {
+  count: number;
+  users: string[];
+}
+
+export interface BonusCategory {
+  real: string | null;
+  predictions: Record<string, BonusPrediction>;
+}
+
+export interface BonusSummary {
+  champion: BonusCategory;
+  runnerUp: BonusCategory;
+  topScorer: BonusCategory;
+  bestGoalkeeper: BonusCategory;
+  bestPlayer: BonusCategory;
+  bestYoungPlayer: BonusCategory;
+}
+
 // ---- votaciones ----
 
 export interface PollOption {
@@ -412,6 +431,8 @@ export const api = {
   standings: () => req<StandingsResponse>("/standings"),
 
   tournament: () => req<TournamentInfo>("/tournament"),
+
+  bonosSummary: () => req<BonusSummary>("/bonos/summary"),
 
   polls: () => req<PollsResponse>("/polls"),
 

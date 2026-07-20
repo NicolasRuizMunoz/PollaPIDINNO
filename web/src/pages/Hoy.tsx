@@ -1,12 +1,17 @@
-﻿import { useEffect } from "react";
+﻿import { useEffect, useState } from "react";
 import { useMatches } from "../useMatches";
 import { MatchCard } from "../components/MatchCard";
 import { Polls } from "../components/Polls";
 import { isToday, formatDate, dayKey, isLiveMatch } from "../util";
-import type { Match } from "../api";
+import { api, type Match } from "../api";
 
 export function Hoy() {
   const { data, loading, error, onSaved, reload } = useMatches();
+  const [info, setInfo] = useState<any>(null);
+
+  useEffect(() => {
+    api.tournament().then(setInfo).catch(console.error);
+  }, []);
 
   // ¿hay algo que valga la pena refrescar? (un partido en vivo, o uno de hoy ya
   // empezado pero sin resultado oficial → puede pasar a vivo en cualquier momento)
@@ -55,6 +60,35 @@ export function Hoy() {
   return (
     <div>
       <Polls />
+
+      {info?.locked && info?.results && (
+        <div style={{
+          backgroundColor: "#fff3cd",
+          border: "1px solid #ffc107",
+          borderRadius: "4px",
+          padding: "1.5rem",
+          marginBottom: "2rem",
+          lineHeight: "1.6",
+        }}>
+          <h3 style={{ margin: "0 0 0.75rem 0", color: "#856404" }}>⚽ ¡Torneo terminado!</h3>
+          <p style={{ margin: "0.5rem 0", color: "#856404" }}>
+            <strong>Ganador: {info.results.champion}</strong> 🏆
+          </p>
+          <p style={{ margin: "0.5rem 0 1rem 0", color: "#856404" }}>
+            Hemos publicado los <strong>resultados oficiales de los bonos</strong>.
+            Por favor revisa la sección de <strong>Bonos</strong> para ver:
+          </p>
+          <ul style={{ margin: "0.5rem 0 1rem 0", paddingLeft: "1.5rem", color: "#856404" }}>
+            <li>Los resultados reales</li>
+            <li>Tus predicciones vs. los resultados</li>
+            <li>Qué escribió cada persona (para transparencia)</li>
+          </ul>
+          <p style={{ margin: "0.75rem 0 0.5rem 0", color: "#856404" }}>
+            <strong>⚠️ Si encuentras un error o discrepancia en los bonos,</strong> por favor contacta al admin (nruiz@copec.cl)
+            para confirmarlo. También compartiremos un archivo con los datos completos.
+          </p>
+        </div>
+      )}
 
       <h2>Partidos de hoy</h2>
       <p className="muted">{formatDate(new Date().toISOString())}</p>

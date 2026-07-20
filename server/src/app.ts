@@ -808,6 +808,157 @@ app.get(
   })
 );
 
+// Mapeo de variantes a valor normalizado (para comparación)
+const normalizationMap = {
+  top_scorer: new Map([
+    ["mbappe", "MBAPPE"], ["Mbappe", "MBAPPE"], ["MBAPPE", "MBAPPE"],
+    ["mbappé", "MBAPPE"], ["Mbappé", "MBAPPE"],
+    ["kylian mbappe", "MBAPPE"], ["Kylian Mbappe", "MBAPPE"],
+    ["kylian mbappé", "MBAPPE"], ["Kylian Mbappé", "MBAPPE"],
+    ["kylian mbapeé", "MBAPPE"], ["Kylian Mbapeé", "MBAPPE"],
+    ["killyan mbappe", "MBAPPE"], ["Mbape", "MBAPPE"], ["mbape", "MBAPPE"],
+    ["messi", "MESSI"], ["Messi", "MESSI"], ["MESSI", "MESSI"],
+    ["lionel messi", "MESSI"], ["Lionel Messi", "MESSI"],
+    ["harry kane", "KANE"], ["Harry Kane", "KANE"],
+  ]),
+  best_goalkeeper: new Map([
+    ["dibu", "SIMON"], ["Dibu", "SIMON"],
+    ["dibu martinez", "SIMON"], ["Dibu martinez", "SIMON"],
+    ["emiliano dibu martinez", "SIMON"], ["Emiliano Dibu Martinez", "SIMON"],
+    ["emiliano martínez", "SIMON"], ["Emiliano Martínez", "SIMON"],
+    ["unai simón", "SIMON"], ["Unai Simón", "SIMON"],
+    ["unai simon", "SIMON"], ["Unai Simon", "SIMON"], ["SIMON", "SIMON"],
+  ]),
+  best_player: new Map([
+    ["mbappe", "MBAPPE"], ["Mbappe", "MBAPPE"],
+    ["kylian mbappe", "MBAPPE"], ["Kylian Mbappe", "MBAPPE"],
+    ["kylian mbappé", "MBAPPE"], ["Kylian Mbappé", "MBAPPE"],
+    ["kylian mbapeé", "MBAPPE"], ["Kylian Mbapeé", "MBAPPE"],
+    ["messi", "MESSI"], ["Messi", "MESSI"],
+    ["lionel messi", "MESSI"], ["Lionel Messi", "MESSI"],
+    ["rodri", "RODRI"], ["Rodri", "RODRI"],
+  ]),
+  best_young_player: new Map([
+    ["lamine yamal", "CUBARSI"], ["Lamine Yamal", "CUBARSI"],
+    ["lamine yamal", "CUBARSI"], ["Lamine yamal", "CUBARSI"],
+    ["lamine", "CUBARSI"], ["Lamine", "CUBARSI"],
+    ["yamal", "CUBARSI"], ["Yamal", "CUBARSI"],
+    ["pau cubarsi", "CUBARSI"], ["Pau Cubarsi", "CUBARSI"],
+  ]),
+};
+
+function normalize(field: string, value: string | null): string | null {
+  if (!value) return null;
+  const map = normalizationMap[field as keyof typeof normalizationMap];
+  if (!map) return value?.trim().toUpperCase() ?? null;
+  return map.get(value.trim()) ?? value.trim().toUpperCase();
+}
+
+// Endpoint público: resumen de bonos con resultados reales y quién acertó
+app.get(
+  "/api/bonos/summary",
+  ah(async (_req, res) => {
+    const teams = await loadTeamMap();
+    const results = {
+      champion: await getSetting("result_champion"),
+      runnerUp: await getSetting("result_runner_up"),
+      topScorer: await getSetting("result_top_scorer"),
+      bestGoalkeeper: await getSetting("result_best_goalkeeper"),
+      bestPlayer: await getSetting("result_best_player"),
+      bestYoungPlayer: await getSetting("result_best_young_player"),
+    };
+
+    const picks = await dbAll<{
+      user_id: number;
+      apodo: string;
+      email: string;
+      champion: string | null;
+      runner_up: string | null;
+      top_scorer: string | null;
+      best_goalkeeper: string | null;
+      best_player: string | null;
+      best_young_player: string | null;
+    }>(
+      `SELECT u.id as user_id, u.apodo, u.email,
+              tp.champion, tp.runner_up, tp.top_scorer,
+              tp.best_goalkeeper, tp.best_player, tp.best_young_player
+       FROM users u
+       LEFT JOIN tournament_picks tp ON u.id = tp.user_id
+       WHERE u.is_active = 1
+       ORDER BY u.apodo`
+    );
+
+    // Agrupar por categoría - mostrar ambos valores (original + normalizado)
+    const summary = {
+      champion: {
+        real: results.champion,
+        predictions: {} as Record<string, { count: number; predictions: Array<{ original: string; normalized: string; users: string[] }> }>
+      },
+      runnerUp: {
+        real: results.runnerUp,
+        predictions: {} as Record<string, { count: number; predictions: Array<{ original: string; normalized: string; users: string[] }> }>
+      },
+      topScorer: {
+        real: results.topScorer,
+        predictions: {} as Record<string, { count: number; predictions: Array<{ original: string; normalized: string; users: string[] }> }>
+      },
+      bestGoalkeeper: {
+        real: results.bestGoalkeeper,
+        predictions: {} as Record<string, { count: number; predictions: Array<{ original: string; normalized: string; users: string[] }> }>
+      },
+      bestPlayer: {
+        real: results.bestPlayer,
+        predictions: {} as Record<string, { count: number; predictions: Array<{ original: string; normalized: string; users: string[] }> }>
+      },
+      bestYoungPlayer: {
+        real: results.bestYoungPlayer,
+        predictions: {} as Record<string, { count: number; predictions: Array<{ original: string; normalized: string; users: string[] }> }>
+      },
+    };
+
+    for (const pick of picks) {
+      const displayName_ = pick.apodo.trim() || maskEmail(pick.email);
+
+      for (const [field, key] of [
+        ["champion", "champion"],
+        ["runner_up", "runnerUp"],
+        ["top_scorer", "topScorer"],
+        ["best_goalkeeper", "bestGoalkeeper"],
+        ["best_player", "bestPlayer"],
+        ["best_young_player", "bestYoungPlayer"],
+      ] as const) {
+        const val = pick[field as keyof typeof pick];
+        if (!val) continue;
+
+        const normalized = normalize(field, val);
+        const key_str = normalized || val;
+
+        if (!summary[key].predictions[key_str]) {
+          summary[key].predictions[key_str] = { count: 0, predictions: [] };
+        }
+
+        summary[key].predictions[key_str].count++;
+
+        // Buscar si ya existe esta predicción (mismo original)
+        const existing = summary[key].predictions[key_str].predictions.find(
+          (p) => p.original === val
+        );
+        if (existing) {
+          existing.users.push(displayName_);
+        } else {
+          summary[key].predictions[key_str].predictions.push({
+            original: val,
+            normalized: normalized || val,
+            users: [displayName_],
+          });
+        }
+      }
+    }
+
+    ok(res, summary);
+  })
+);
+
 // ---------------------------------------------------------------- errores
 
 app.use((err: unknown, _req: AuthedRequest, res: Response, _next: NextFunction) => {

@@ -128,7 +128,7 @@ export function App() {
         {tab === "posiciones" && <Standings />}
         {tab === "tabla" && <Leaderboard />}
         {tab === "mis" && <MisPartidos />}
-        {tab === "wrapped" && <Wrapped onNavigate={setTab} />}
+        {tab === "wrapped" && <Wrapped onNavigate={(t) => setTab(t as Tab)} />}
         {tab === "evolucion" && <Evolution />}
         {tab === "admin" && user.isAdmin && <Admin />}
       </main>
