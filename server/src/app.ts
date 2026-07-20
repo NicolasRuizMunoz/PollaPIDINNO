@@ -917,7 +917,7 @@ app.get(
     };
 
     for (const pick of picks) {
-      const displayName_ = pick.apodo.trim() || maskEmail(pick.email);
+      const displayName_ = pick.apodo.trim() || displayName(pick.apodo, pick.email);
 
       for (const [field, key] of [
         ["champion", "champion"],
@@ -928,9 +928,9 @@ app.get(
         ["best_young_player", "bestYoungPlayer"],
       ] as const) {
         const val = pick[field as keyof typeof pick];
-        if (!val) continue;
+        if (!val || typeof val !== "string") continue;
 
-        const normalized = normalize(field, val);
+        const normalized = normalize(field as any, val);
         const key_str = normalized || val;
 
         if (!summary[key].predictions[key_str]) {
@@ -947,7 +947,7 @@ app.get(
           existing.users.push(displayName_);
         } else {
           summary[key].predictions[key_str].predictions.push({
-            original: val,
+            original: val as string,
             normalized: normalized || val,
             users: [displayName_],
           });
