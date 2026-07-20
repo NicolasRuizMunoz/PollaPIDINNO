@@ -34,7 +34,7 @@ import {
   getEvolution,
 } from "./queries.js";
 import { groupStandings, bestThirds, eliminatedTeams, resolveBracket } from "./advancement.js";
-import { scoreAdvance } from "./scoring.js";
+import { scoreAdvance, scoreTournament } from "./scoring.js";
 import { updateLiveMatches } from "./live.js";
 
 export const app = express();
@@ -650,6 +650,47 @@ app.put(
     await setSetting("result_best_player", str(bestPlayer));
     await setSetting("result_best_young_player", str(bestYoungPlayer));
     ok(res, { saved: true });
+  })
+);
+
+app.post(
+  "/api/admin/recalculate-bonos",
+  requireAdmin,
+  ah(async (_req, res) => {
+    const results = {
+      champion: await getSetting("result_champion"),
+      runnerUp: await getSetting("result_runner_up"),
+      topScorer: await getSetting("result_top_scorer"),
+      bestGoalkeeper: await getSetting("result_best_goalkeeper"),
+      bestPlayer: await getSetting("result_best_player"),
+      bestYoungPlayer: await getSetting("result_best_young_player"),
+    };
+    const bonusPicks = await dbAll<{
+      user_id: number;
+      champion: string | null;
+      runner_up: string | null;
+      top_scorer: string | null;
+      best_goalkeeper: string | null;
+      best_player: string | null;
+      best_young_player: string | null;
+    }>("SELECT user_id, champion, runner_up, top_scorer, best_goalkeeper, best_player, best_young_player FROM tournament_picks");
+
+    let matches = 0;
+    for (const b of bonusPicks) {
+      const pts = scoreTournament(
+        {
+          champion: b.champion,
+          runnerUp: b.runner_up,
+          topScorer: b.top_scorer,
+          bestGoalkeeper: b.best_goalkeeper,
+          bestPlayer: b.best_player,
+          bestYoungPlayer: b.best_young_player,
+        },
+        results
+      );
+      if (pts > 0) matches++;
+    }
+    ok(res, { processed: bonusPicks.length, matches });
   })
 );
 

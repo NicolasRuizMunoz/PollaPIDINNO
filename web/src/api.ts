@@ -490,6 +490,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  adminRecalculateBonos: () =>
+    req<{ processed: number; matches: number }>("/admin/recalculate-bonos", {
+      method: "POST",
+    }),
+
   adminSettings: (data: {
     bonosDeadline?: string | null;
     pollsDeadline?: string | null;

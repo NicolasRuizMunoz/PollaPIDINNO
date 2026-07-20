@@ -166,6 +166,8 @@ const normalizationMaps = {
     ["kylian mbappe", "MBAPPE"], ["Kylian Mbappe", "MBAPPE"],
     ["kylian mbappé", "MBAPPE"], ["Kylian Mbappé", "MBAPPE"],
     ["kylian mbapeé", "MBAPPE"], ["Kylian Mbapeé", "MBAPPE"],
+    ["kyliam mbappe", "MBAPPE"], ["Kyliam Mbappe", "MBAPPE"],
+    ["KYLIAM MBAPPE", "MBAPPE"],
     ["killyan mbappe", "MBAPPE"], ["Mbape", "MBAPPE"], ["mbape", "MBAPPE"],
     ["messi", "MESSI"], ["Messi", "MESSI"], ["MESSI", "MESSI"],
     ["lionel messi", "MESSI"], ["Lionel Messi", "MESSI"],

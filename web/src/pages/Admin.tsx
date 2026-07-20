@@ -383,6 +383,7 @@ function AdminTournament() {
   const [deadline, setDeadline] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recalcBusy, setRecalcBusy] = useState(false);
 
   useEffect(() => {
     api.teams().then(setTeams).catch((e) => setError(e.message));
@@ -430,6 +431,20 @@ function AdminTournament() {
     }
   }
 
+  async function recalculateBonos() {
+    setMsg(null);
+    setError(null);
+    setRecalcBusy(true);
+    try {
+      const { processed, matches } = await api.adminRecalculateBonos();
+      setMsg(`Bonos verificados: ${matches} coinciden de ${processed} registros`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setRecalcBusy(false);
+    }
+  }
+
   return (
     <div>
       <h3>Resultados de los bonos</h3>
@@ -474,6 +489,14 @@ function AdminTournament() {
         <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
         <button className="btn" onClick={saveDeadline}>Guardar fecha</button>
       </div>
+
+      <h3 style={{ marginTop: 24 }}>Recalcular bonos</h3>
+      <p className="muted small">
+        Verifica que todos los nombres en los bonos de los participantes se normalicen correctamente con los resultados reales.
+      </p>
+      <button className="btn" onClick={recalculateBonos} disabled={recalcBusy}>
+        {recalcBusy ? "Recalculando…" : "🔄 Recalcular bonos"}
+      </button>
 
       <AdminVotingResults />
 
